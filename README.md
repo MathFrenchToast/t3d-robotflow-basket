@@ -38,6 +38,14 @@ Run the tracking pipeline on a video:
 uv run python -m src.main --source path/to/video.mp4 --target output.mp4
 ```
 
+## Troubleshooting
+
+### PyCUDA Build Errors
+If `uv sync` fails with `pycuda` build errors on your GPU VM:
+1. Ensure build essentials are installed: `sudo apt install build-essential python3-dev`
+2. Ensure CUDA is in your PATH: `export PATH=/usr/local/cuda/bin:$PATH`
+3. Try: `CUDA_INC_DIR=/usr/local/cuda/include uv sync`
+
 ## Project Structure
 - `src/config.py`: Thresholds and model IDs.
 - `src/models.py`: Model loading logic.
