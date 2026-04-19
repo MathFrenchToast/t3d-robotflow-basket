@@ -1,6 +1,7 @@
 import supervision as sv
 import numpy as np
 from tqdm import tqdm
+from sports import ViewTransformer
 from src.config import (
     PLAYER_DETECTION_MODEL_CONFIDENCE,
     PLAYER_DETECTION_MODEL_IOU_THRESHOLD,
@@ -32,6 +33,12 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 iou_threshold=PLAYER_DETECTION_MODEL_IOU_THRESHOLD
             )[0]
             detections = sv.Detections.from_inference(player_results)
+
+            court_results = models.court_model.infer(
+                frame, 
+                confidence=KEYPOINT_DETECTION_MODEL_CONFIDENCE
+            )[0]
+            keypoints = sv.KeyPoints.from_inference(court_results)
             
             # 2. Track Players
             # Filter for player class before tracking if necessary (depending on model)
@@ -75,6 +82,18 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             
             annotated_frame = annotator.annotate_frame(frame, detections, labels)
             
+            # 7. Court Transformation & Overlay
+            if len(keypoints) > 0:
+                view_transformer = ViewTransformer(
+                    source=keypoints.xy[0],
+                    target=np.array(annotator.court_config.vertices)
+                )
+                points = detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
+                transformed_points = view_transformer.transform_points(points=points)
+                
+                court_image = annotator.draw_court_overlay(transformed_points)
+                annotated_frame = annotator.overlay_court(annotated_frame, court_image)
+
             # Add shot event overlay if needed
             if shot_events:
                 # Logic to visualize shot events could be added here

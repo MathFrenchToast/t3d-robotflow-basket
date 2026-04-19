@@ -48,3 +48,18 @@ class BasketballAnnotator:
             detections=detections_xy,
             court=self.court_image.copy()
         )
+
+    def overlay_court(self, frame, court_image):
+        fh, fw, _ = frame.shape
+        ch, cw, _ = court_image.shape
+        
+        # Scaling the court image to be roughly 1/4 of the frame height
+        scale_factor = (fh / 4.0) / ch
+        new_cw = int(cw * scale_factor)
+        new_ch = int(ch * scale_factor)
+        resized_court = cv2.resize(court_image, (new_cw, new_ch))
+        
+        # Place in top-right corner with 20px padding
+        padding = 20
+        frame[padding:padding+new_ch, fw-new_cw-padding:fw-padding] = resized_court
+        return frame
