@@ -16,7 +16,8 @@ A modular Python project to detect, track, and identify basketball players, insp
 
 1. Clone the repository and navigate to the project:
    ```bash
-   cd basketball-ai
+   git clone https://github.com/MathFrenchToast/t3d-robotflow-basket.git
+   cd t3d-robotflow-basket
    ```
 
 2. Configure environment variables:
