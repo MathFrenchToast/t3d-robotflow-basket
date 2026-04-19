@@ -41,10 +41,16 @@ uv run python -m src.main --source path/to/video.mp4 --target output.mp4
 ## Troubleshooting
 
 ### PyCUDA Build Errors
-If `uv sync` fails with `pycuda` build errors on your GPU VM:
-1. Ensure build essentials are installed: `sudo apt install build-essential python3-dev`
-2. Ensure CUDA is in your PATH: `export PATH=/usr/local/cuda/bin:$PATH`
-3. Try: `CUDA_INC_DIR=/usr/local/cuda/include uv sync`
+If `uv sync` fails with `pycuda` build errors:
+1. **Install Dependencies**: `sudo apt install build-essential python3-dev nvidia-cuda-toolkit`
+2. **Find CUDA Path**: Run `which nvcc`. 
+   - If it returns `/usr/bin/nvcc`, your headers are likely in `/usr/include`.
+   - If it returns `/usr/local/cuda-X.X/bin/nvcc`, your path is `/usr/local/cuda-X.X`.
+3. **Export and Sync**:
+   ```bash
+   export CUDA_INC_DIR=/usr/include  # or your specific path
+   uv sync
+   ```
 
 ## Project Structure
 - `src/config.py`: Thresholds and model IDs.
