@@ -44,8 +44,8 @@ uv run python -m src.main --source path/to/video.mp4 --target output.mp4
 If `uv sync` fails with `pycuda` build errors:
 1. **Install Dependencies**: `sudo apt install build-essential python3-dev nvidia-cuda-toolkit`
 2. **Find CUDA Path**: Run `which nvcc`. 
-   - If it returns `/usr/bin/nvcc`, your headers are likely in `/usr/include`.
-   - If it returns `/usr/local/cuda-X.X/bin/nvcc`, your path is `/usr/local/cuda-X.X`.
+   - If `which nvcc` is empty, you must install it: `sudo apt install nvidia-cuda-toolkit`.
+   - Note: If `find` only shows headers in `/usr/include/linux/cuda.h`, these are **kernel headers** and are insufficient. You need the toolkit headers.
 3. **Export and Sync**:
    ```bash
    export CUDA_INC_DIR=/usr/include  # or your specific path
