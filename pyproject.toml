@@ -1,0 +1,19 @@
+[project]
+name = "basketball-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "inference-gpu>=1.2.3",
+    "num2words>=0.5.14",
+    "opencv-python>=4.10.0.84",
+    "python-dotenv>=1.0.1",
+    "sports",
+    "supervision==0.27.0",
+    "tqdm>=4.67.3",
+    "transformers>=5.2.0",
+]
+
+[tool.uv.sources]
+sports = { git = "https://github.com/roboflow/sports.git", rev = "feat/basketball" }
