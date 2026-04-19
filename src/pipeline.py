@@ -20,6 +20,7 @@ def run_pipeline(source_video_path: str, target_video_path: str):
     frame_generator = sv.get_video_frames_generator(source_video_path)
     
     view_transformer = None
+    is_team_classifier_fitted = False
 
     with sv.VideoSink(target_video_path, video_info) as sink:
         for frame in tqdm(frame_generator, total=video_info.total_frames):
@@ -34,30 +35,38 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             # 2. Tracking
             detections = byte_tracker.update_with_detections(detections)
             
-            # 3. Court Detection (Keypoints)
+            # 3. Team Classification Calibration (On first few detections)
+            if not is_team_classifier_fitted and len(detections) > 4:
+                # Scale boxes for better feature extraction from jerseys
+                player_boxes = sv.scale_boxes(xyxy=detections.xyxy, factor=0.4)
+                player_crops = [sv.crop_image(frame, box) for box in player_boxes]
+                models.fit_teams(player_crops)
+                is_team_classifier_fitted = True
+            
+            # 4. Court Detection (Keypoints)
             court_results = models.court_model.infer(
                 frame, 
                 confidence=KEYPOINT_DETECTION_MODEL_CONFIDENCE
             )[0]
             keypoints = sv.KeyPoints.from_inference(court_results)
             
-            # 4. Homography / View Transformation
-            # Note: In a real scenario, we'd match detected keypoints to court coordinates
-            if len(keypoints) > 0:
-                # This is a simplified transformation logic
-                # Actual logic would involve matching keypoint IDs to court landmarks
-                pass
+            # 5. Annotation & Logic
+            # Team Prediction
+            if is_team_classifier_fitted:
+                player_boxes = sv.scale_boxes(xyxy=detections.xyxy, factor=0.4)
+                player_crops = [sv.crop_image(frame, box) for box in player_boxes]
+                team_ids = models.predict_teams(player_crops)
+                team_validator.update(tracker_ids=detections.tracker_id, values=team_ids)
 
-            # 5. Jersey Number Recognition (Optional/Heuristic)
-            # In a full run, we'd crop player detections and run number_model.infer
-            
-            # 6. Annotation
-            # Get validated numbers if any (currently defaults to tracker_id)
+            # Labels Generation
             validated_numbers = number_validator.get_validated(tracker_ids=detections.tracker_id)
-            labels = [
-                f"#{num if num is not None else tid}" 
-                for tid, num in zip(detections.tracker_id, validated_numbers)
-            ]
+            validated_teams = team_validator.get_validated(tracker_ids=detections.tracker_id)
+            
+            labels = []
+            for tid, num, team in zip(detections.tracker_id, validated_numbers, validated_teams):
+                team_label = f"T{team}" if team is not None else ""
+                num_label = f"#{num}" if num is not None else f"ID{tid}"
+                labels.append(f"{team_label} {num_label}")
             
             annotated_frame = annotator.annotate_frame(frame, detections, labels)
             annotated_frame = annotator.annotate_keypoints(annotated_frame, keypoints)
