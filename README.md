@@ -1,6 +1,7 @@
 # Basketball AI
 
 A modular Python project to detect, track, and identify basketball players, inspired by the Roboflow Basketball AI notebook.
+from this collab notebook from roboflow: https://colab.research.google.com/github/roboflow-ai/notebooks/blob/main/notebooks/basketball-ai-how-to-detect-track-and-identify-basketball-players.ipynb#scrollTo=Ul99bONuZp-I
 
 ## Features
 - **Player Detection**: Uses Roboflow Inference with YOLO-based models.
