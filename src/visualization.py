@@ -36,9 +36,13 @@ class BasketballAnnotator:
         )
         return annotated_frame
 
+    def annotate_keypoints(self, frame, keypoints):
+        return self.vertex_annotator.annotate(
+            scene=frame.copy(),
+            keypoints=keypoints
+        )
+
     def draw_court_overlay(self, detections_xy):
-        # Implementation for drawing points on the court based on transformed coordinates
-        # This typically returns a separate image or modifies the court image
         return draw_points_on_court(
             config=self.court_config,
             detections=detections_xy,

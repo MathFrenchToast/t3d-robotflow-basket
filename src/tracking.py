@@ -1,5 +1,6 @@
 import supervision as sv
 from sports.basketball import ShotEventTracker
+from sports import ConsecutiveValueTracker
 
 def initialize_trackers(fps: float):
     byte_tracker = sv.ByteTrack()
@@ -10,4 +11,8 @@ def initialize_trackers(fps: float):
         cooldown_frames_after_made=int(fps * 0.5),
     )
     
-    return byte_tracker, shot_event_tracker
+    # Trackers for jersey numbers and team assignments
+    number_validator = ConsecutiveValueTracker(n_consecutive=3)
+    team_validator = ConsecutiveValueTracker(n_consecutive=1)
+    
+    return byte_tracker, shot_event_tracker, number_validator, team_validator
