@@ -95,8 +95,8 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 for crop_box in clipped_boxes:
                     number_crop = sv.crop_image(frame, crop_box)
                     if number_crop.size > 0:
-                        # Use predict for SmolVLM based OCR model
-                        res = models.number_model.predict(number_crop, prompt=NUMBER_RECOGNITION_MODEL_PROMPT)[0]
+                        # Use infer for SmolVLM based OCR model to ensure preprocessing is handled
+                        res = models.number_model.infer(number_crop, prompt=NUMBER_RECOGNITION_MODEL_PROMPT)[0].response
                         numbers.append(res)
                     else:
                         numbers.append(None)
