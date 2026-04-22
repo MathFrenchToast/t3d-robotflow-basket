@@ -3,3 +3,5 @@ __pycache__/
 .env
 *.mp4
 .DS_Store
+
+*.ipynb

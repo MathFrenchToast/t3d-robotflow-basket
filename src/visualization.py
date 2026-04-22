@@ -45,7 +45,7 @@ class BasketballAnnotator:
     def draw_court_overlay(self, detections_xy):
         return draw_points_on_court(
             config=self.court_config,
-            detections=detections_xy,
+            xy=detections_xy,
             court=self.court_image.copy()
         )
 

@@ -60,3 +60,22 @@ If `uv sync` fails with `pycuda` build errors:
 - `src/visualization.py`: Annotation and court drawing.
 - `src/pipeline.py`: Main processing loop.
 - `src/main.py`: CLI entry point.
+
+## Comparison with Original Notebook
+
+While this project is inspired by the Roboflow Basketball AI notebook, several architectural changes were made to convert it into a production-ready modular application:
+
+1. **Tracking Mechanism**:
+   - **Notebook**: Uses **SAM2 (Segment Anything Model 2)** which provides high-accuracy segmentation masks but is computationally intensive.
+   - **This Project**: Uses **ByteTrack** with bounding boxes. This significantly improves processing speed (FPS) while maintaining robust tracking, suitable for real-time or batch processing on standard RTX GPUs.
+
+2. **Code Structure**:
+   - **Notebook**: A linear execution flow designed for experimentation.
+   - **This Project**: Modularized into separate concerns (Models, Tracking, Visualization, Pipeline). Logic like jersey number matching and team validation is encapsulated into stateful classes to ensure stability across video frames.
+
+3. **API & Library Drift**:
+   - The `sports` library is under active development. This project implements fixes for API changes (e.g., `draw_points_on_court` parameter updates) that occurred after the notebook was published.
+   - We use `inference-gpu` for optimized model serving, ensuring better utilization of NVIDIA hardware compared to standard CPU-based inference.
+
+4. **Identification Logic**:
+   - Adapted the mask-based IoU matching from the notebook to work with bounding box IoU, allowing jersey number recognition to function effectively without the overhead of SAM2 masks.

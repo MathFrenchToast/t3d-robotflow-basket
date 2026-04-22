@@ -6,13 +6,21 @@ from src.config import (
     PLAYER_DETECTION_MODEL_CONFIDENCE,
     PLAYER_DETECTION_MODEL_IOU_THRESHOLD,
     KEYPOINT_DETECTION_MODEL_CONFIDENCE,
+    NUMBER_RECOGNITION_MODEL_CONFIDENCE,
+    NUMBER_RECOGNITION_MODEL_PROMPT,
     BALL_IN_BASKET_CLASS_ID,
+    NUMBER_CLASS_ID,
     JUMP_SHOT_CLASS_ID,
     LAYUP_DUNK_CLASS_ID
 )
 from src.models import BasketballModels
 from src.tracking import initialize_trackers
 from src.visualization import BasketballAnnotator
+
+def coords_above_threshold(matrix: np.ndarray, threshold: float):
+    A = np.asarray(matrix)
+    rows, cols = np.where(A > threshold)
+    return list(zip(rows.tolist(), cols.tolist()))
 
 def run_pipeline(source_video_path: str, target_video_path: str):
     models = BasketballModels()
@@ -32,7 +40,14 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 confidence=PLAYER_DETECTION_MODEL_CONFIDENCE, 
                 iou_threshold=PLAYER_DETECTION_MODEL_IOU_THRESHOLD
             )[0]
-            detections = sv.Detections.from_inference(player_results)
+            all_detections = sv.Detections.from_inference(player_results)
+            
+            # Filter detections for players and numbers separately
+            # Note: in this model, class_id might represent players, ball, etc.
+            # We assume PLAYER_CLASS_ID is what's used for tracking. 
+            # Looking at notebook, they use class_id == NUMBER_CLASS_ID for numbers.
+            detections = all_detections[all_detections.class_id != NUMBER_CLASS_ID]
+            number_detections = all_detections[all_detections.class_id == NUMBER_CLASS_ID]
 
             court_results = models.court_model.infer(
                 frame, 
@@ -41,13 +56,12 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             keypoints = sv.KeyPoints.from_inference(court_results)
             
             # 2. Track Players
-            # Filter for player class before tracking if necessary (depending on model)
             detections = byte_tracker.update_with_detections(detections)
             
             # 3. Shot Detection Logic
-            has_jump_shot = JUMP_SHOT_CLASS_ID in detections.class_id
-            has_layup_dunk = LAYUP_DUNK_CLASS_ID in detections.class_id
-            has_ball_in_basket = BALL_IN_BASKET_CLASS_ID in detections.class_id
+            has_jump_shot = JUMP_SHOT_CLASS_ID in all_detections.class_id
+            has_layup_dunk = LAYUP_DUNK_CLASS_ID in all_detections.class_id
+            has_ball_in_basket = BALL_IN_BASKET_CLASS_ID in all_detections.class_id
             
             shot_events = shot_tracker.update(
                 frame_index=frame_index,
@@ -69,6 +83,39 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 player_crops = [sv.crop_image(frame, box) for box in player_boxes]
                 team_ids = models.predict_teams(player_crops)
                 team_validator.update(tracker_ids=detections.tracker_id, values=team_ids)
+
+            # Jersey Number Recognition (every 5 frames to save GPU)
+            if frame_index % 5 == 0 and len(number_detections) > 0 and len(detections) > 0:
+                frame_h, frame_w, _ = frame.shape
+                # Crop and Recognize
+                padded_boxes = sv.pad_boxes(xyxy=number_detections.xyxy, px=10, py=10)
+                clipped_boxes = sv.clip_boxes(xyxy=padded_boxes, resolution_wh=(frame_w, frame_h))
+                
+                numbers = []
+                for crop_box in clipped_boxes:
+                    number_crop = sv.crop_image(frame, crop_box)
+                    if number_crop.size > 0:
+                        # Use predict for SmolVLM based OCR model
+                        res = models.number_model.predict(number_crop, prompt=NUMBER_RECOGNITION_MODEL_PROMPT)[0]
+                        numbers.append(res)
+                    else:
+                        numbers.append(None)
+                
+                # Match numbers with tracked players using Box IoU (or IoS if available)
+                # Since we don't have masks here, we use box IoU
+                iou = sv.box_iou_batch(
+                    boxes_true=detections.xyxy,
+                    boxes_detection=number_detections.xyxy
+                )
+                
+                pairs = coords_above_threshold(iou, 0.2) # lower threshold for boxes
+                if pairs:
+                    player_idx, number_idx = zip(*pairs)
+                    matched_player_ids = detections.tracker_id[list(player_idx)]
+                    matched_numbers = [numbers[i] for i in number_idx if numbers[i] is not None]
+                    
+                    if len(matched_player_ids) == len(matched_numbers):
+                        number_validator.update(tracker_ids=matched_player_ids, values=matched_numbers)
 
             # 6. Annotation
             validated_numbers = number_validator.get_validated(tracker_ids=detections.tracker_id)
@@ -94,9 +141,4 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 court_image = annotator.draw_court_overlay(transformed_points)
                 annotated_frame = annotator.overlay_court(annotated_frame, court_image)
 
-            # Add shot event overlay if needed
-            if shot_events:
-                # Logic to visualize shot events could be added here
-                pass
-                
             sink.write_frame(annotated_frame)
