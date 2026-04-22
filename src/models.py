@@ -3,10 +3,12 @@ import torch
 import numpy as np
 import cv2
 from sklearn.cluster import KMeans
+from sports import TeamClassifier
 from src.config import (
     PLAYER_DETECTION_MODEL_ID,
     NUMBER_RECOGNITION_MODEL_ID,
-    KEYPOINT_DETECTION_MODEL_ID
+    KEYPOINT_DETECTION_MODEL_ID,
+    USE_FAST_TEAM_CLASSIFIER
 )
 
 def load_player_detection_model():
@@ -58,7 +60,10 @@ class BasketballModels:
         except Exception:
             self.device = "cpu"
             
-        self.team_classifier = SimpleTeamClassifier()
+        if USE_FAST_TEAM_CLASSIFIER:
+            self.team_classifier = SimpleTeamClassifier()
+        else:
+            self.team_classifier = TeamClassifier(device=self.device)
 
     def fit_teams(self, player_crops):
         """Fits the team classifier using the provided player crops."""
