@@ -110,12 +110,16 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 
                 pairs = coords_above_threshold(iou, 0.2) # lower threshold for boxes
                 if pairs:
-                    player_idx, number_idx = zip(*pairs)
-                    matched_player_ids = detections.tracker_id[list(player_idx)]
-                    matched_numbers = [numbers[i] for i in number_idx if numbers[i] is not None]
+                    valid_matched_player_ids = []
+                    valid_matched_numbers = []
+                    for p_idx, n_idx in pairs:
+                        val = numbers[n_idx]
+                        if val is not None:
+                            valid_matched_player_ids.append(detections.tracker_id[p_idx])
+                            valid_matched_numbers.append(val)
                     
-                    if len(matched_player_ids) == len(matched_numbers):
-                        number_validator.update(tracker_ids=matched_player_ids, values=matched_numbers)
+                    if valid_matched_player_ids:
+                        number_validator.update(tracker_ids=valid_matched_player_ids, values=valid_matched_numbers)
 
             # 6. Annotation
             validated_numbers = number_validator.get_validated(tracker_ids=detections.tracker_id)
