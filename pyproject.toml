@@ -13,7 +13,7 @@ dependencies = [
     "sports",
     "supervision==0.27.0",
     "tqdm>=4.67.3",
-    "transformers>=5.2.0",
+    "transformers>=4.46.0",
 ]
 
 [tool.uv.sources]
