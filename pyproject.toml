@@ -9,6 +9,7 @@ dependencies = [
     "num2words>=0.5.14",
     "opencv-python>=4.10.0.84",
     "python-dotenv>=1.0.1",
+    "scikit-learn",
     "sports",
     "supervision==0.27.0",
     "tqdm>=4.67.3",
