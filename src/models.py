@@ -23,7 +23,22 @@ def load_court_detection_model():
     return get_model(KEYPOINT_DETECTION_MODEL_ID)
 
 def load_sam2_model():
-    return get_model(SAM2_MODEL_ID)
+    """Loads SAM2 model with a fallback to avoid the 'multiple values for model_id' bug."""
+    try:
+        # Try positional first (standard)
+        return get_model(SAM2_MODEL_ID)
+    except TypeError as e:
+        if "multiple values for argument 'model_id'" in str(e):
+            # If get_model factory is broken, try to use the model class directly if possible
+            # or try to call get_model without a positional argument if the factory is buggy
+            try:
+                from inference.models.sam2.segment_anything_2 import SegmentAnything2
+                return SegmentAnything2(model_id=SAM2_MODEL_ID)
+            except ImportError:
+                # If we can't import directly, we try one last hack: passing it as keyword only
+                # (though we already tried, some internal states might differ)
+                raise e
+        raise e
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
