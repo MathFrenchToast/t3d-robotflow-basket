@@ -103,8 +103,14 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             if not is_team_classifier_fitted and len(detections) > 4:
                 # In SAM2 mode, we don't scale down as much because masks already handle noise
                 factor = 1.0 if USE_SAM2 else 0.4
-                scaled_detections = detections.copy()
-                scaled_detections.xyxy = sv.scale_boxes(xyxy=detections.xyxy, factor=factor)
+                scaled_detections = sv.Detections(
+                    xyxy=sv.scale_boxes(xyxy=detections.xyxy, factor=factor),
+                    mask=detections.mask,
+                    confidence=detections.confidence,
+                    class_id=detections.class_id,
+                    tracker_id=detections.tracker_id,
+                    data=detections.data
+                )
                 player_crops = get_masked_crops(frame, scaled_detections)
                 
                 # Save calibration crops
@@ -118,8 +124,14 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             # 5. Team & Jersey Identification
             if is_team_classifier_fitted:
                 factor = 1.0 if USE_SAM2 else 0.4
-                scaled_detections = detections.copy()
-                scaled_detections.xyxy = sv.scale_boxes(xyxy=detections.xyxy, factor=factor)
+                scaled_detections = sv.Detections(
+                    xyxy=sv.scale_boxes(xyxy=detections.xyxy, factor=factor),
+                    mask=detections.mask,
+                    confidence=detections.confidence,
+                    class_id=detections.class_id,
+                    tracker_id=detections.tracker_id,
+                    data=detections.data
+                )
                 player_crops = get_masked_crops(frame, scaled_detections)
                 
                 team_ids = models.predict_teams(player_crops)
