@@ -1,5 +1,7 @@
 import supervision as sv
 import numpy as np
+import cv2
+import os
 from tqdm import tqdm
 from sports import ViewTransformer
 from src.config import (
@@ -11,7 +13,8 @@ from src.config import (
     BALL_IN_BASKET_CLASS_ID,
     NUMBER_CLASS_ID,
     JUMP_SHOT_CLASS_ID,
-    LAYUP_DUNK_CLASS_ID
+    LAYUP_DUNK_CLASS_ID,
+    USE_SAM2
 )
 from src.models import BasketballModels
 from src.tracking import initialize_trackers
@@ -21,6 +24,26 @@ def coords_above_threshold(matrix: np.ndarray, threshold: float):
     A = np.asarray(matrix)
     rows, cols = np.where(A > threshold)
     return list(zip(rows.tolist(), cols.tolist()))
+
+def get_masked_crops(frame, detections):
+    """Extracts crops from the frame, and if masks are available, blacks out the background."""
+    crops = []
+    for i in range(len(detections)):
+        box = detections.xyxy[i]
+        crop = sv.crop_image(frame, box)
+        
+        if detections.mask is not None:
+            mask = detections.mask[i]
+            # Crop the mask to the same size as the player crop
+            crop_mask = sv.crop_image(mask.astype(np.uint8) * 255, box)
+            if crop_mask.shape[:2] != crop.shape[:2]:
+                crop_mask = cv2.resize(crop_mask, (crop.shape[1], crop.shape[0]))
+            
+            # Apply mask to black out background
+            crop = cv2.bitwise_and(crop, crop, mask=crop_mask)
+            
+        crops.append(crop)
+    return crops
 
 def run_pipeline(source_video_path: str, target_video_path: str):
     models = BasketballModels()
@@ -58,6 +81,12 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             # 2. Track Players
             detections = byte_tracker.update_with_detections(detections)
             
+            # 2.1 Refine with SAM2 Masks (Optional but recommended for accuracy)
+            if USE_SAM2 and len(detections) > 0:
+                masks = models.get_masks(frame, detections)
+                if masks is not None:
+                    detections.mask = masks
+
             # 3. Shot Detection Logic
             has_jump_shot = JUMP_SHOT_CLASS_ID in all_detections.class_id
             has_layup_dunk = LAYUP_DUNK_CLASS_ID in all_detections.class_id
@@ -72,17 +101,35 @@ def run_pipeline(source_video_path: str, target_video_path: str):
             
             # 4. Team Classification Calibration
             if not is_team_classifier_fitted and len(detections) > 4:
-                player_boxes = sv.scale_boxes(xyxy=detections.xyxy, factor=0.4)
-                player_crops = [sv.crop_image(frame, box) for box in player_boxes]
+                # In SAM2 mode, we don't scale down as much because masks already handle noise
+                factor = 1.0 if USE_SAM2 else 0.4
+                scaled_detections = detections.copy()
+                scaled_detections.xyxy = sv.scale_boxes(xyxy=detections.xyxy, factor=factor)
+                player_crops = get_masked_crops(frame, scaled_detections)
+                
+                # Save calibration crops
+                for i, crop in enumerate(player_crops):
+                    if crop.size > 0:
+                        cv2.imwrite(f"debug_crops/players/calib_{i}.png", crop)
+                
                 models.fit_teams(player_crops)
                 is_team_classifier_fitted = True
             
             # 5. Team & Jersey Identification
             if is_team_classifier_fitted:
-                player_boxes = sv.scale_boxes(xyxy=detections.xyxy, factor=0.4)
-                player_crops = [sv.crop_image(frame, box) for box in player_boxes]
+                factor = 1.0 if USE_SAM2 else 0.4
+                scaled_detections = detections.copy()
+                scaled_detections.xyxy = sv.scale_boxes(xyxy=detections.xyxy, factor=factor)
+                player_crops = get_masked_crops(frame, scaled_detections)
+                
                 team_ids = models.predict_teams(player_crops)
                 team_validator.update(tracker_ids=detections.tracker_id, values=team_ids)
+                
+                # Save some prediction crops for debug (first 10 frames after calib)
+                if frame_index < 50:
+                    for i, (crop, tid, team) in enumerate(zip(player_crops, detections.tracker_id, team_ids)):
+                        if crop.size > 0:
+                            cv2.imwrite(f"debug_crops/players/frame_{frame_index}_id{tid}_team{team}.png", crop)
 
             # Jersey Number Recognition (every 5 frames to save GPU)
             if frame_index % 5 == 0 and len(number_detections) > 0 and len(detections) > 0:
@@ -92,9 +139,12 @@ def run_pipeline(source_video_path: str, target_video_path: str):
                 clipped_boxes = sv.clip_boxes(xyxy=padded_boxes, resolution_wh=(frame_w, frame_h))
                 
                 numbers = []
-                for crop_box in clipped_boxes:
+                for i, crop_box in enumerate(clipped_boxes):
                     number_crop = sv.crop_image(frame, crop_box)
                     if number_crop.size > 0:
+                        # Save number crop for debug
+                        cv2.imwrite(f"debug_crops/numbers/frame_{frame_index}_n{i}.png", number_crop)
+                        
                         # Use infer for SmolVLM based OCR model to ensure preprocessing is handled
                         res = models.number_model.infer(number_crop, prompt=NUMBER_RECOGNITION_MODEL_PROMPT)[0].response
                         numbers.append(res)

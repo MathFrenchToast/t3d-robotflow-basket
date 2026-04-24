@@ -10,6 +10,7 @@ ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
 PLAYER_DETECTION_MODEL_ID = "basketball-player-detection-3-ycjdo/4"
 NUMBER_RECOGNITION_MODEL_ID = "basketball-jersey-numbers-ocr/3"
 KEYPOINT_DETECTION_MODEL_ID = "basketball-court-detection-2/14"
+SAM2_MODEL_ID = "sam2/hvit-b" # Model identifier for SAM2
 
 # Model Thresholds
 PLAYER_DETECTION_MODEL_CONFIDENCE = 0.4
@@ -22,6 +23,7 @@ NUMBER_RECOGNITION_MODEL_PROMPT = "Read the number."
 
 # Performance Flags
 USE_FAST_TEAM_CLASSIFIER = True
+USE_SAM2 = False
 
 # Class IDs
 BALL_IN_BASKET_CLASS_ID = 1

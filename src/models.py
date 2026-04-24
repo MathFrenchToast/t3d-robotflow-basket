@@ -8,7 +8,9 @@ from src.config import (
     PLAYER_DETECTION_MODEL_ID,
     NUMBER_RECOGNITION_MODEL_ID,
     KEYPOINT_DETECTION_MODEL_ID,
-    USE_FAST_TEAM_CLASSIFIER
+    USE_FAST_TEAM_CLASSIFIER,
+    USE_SAM2,
+    SAM2_MODEL_ID
 )
 
 def load_player_detection_model():
@@ -19,6 +21,9 @@ def load_number_recognition_model():
 
 def load_court_detection_model():
     return get_model(model_id=KEYPOINT_DETECTION_MODEL_ID)
+
+def load_sam2_model():
+    return get_model(model_id=SAM2_MODEL_ID)
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
@@ -53,6 +58,7 @@ class BasketballModels:
         self.player_model = load_player_detection_model()
         self.number_model = load_number_recognition_model()
         self.court_model = load_court_detection_model()
+        self.sam2_model = load_sam2_model() if USE_SAM2 else None
         
         # Graceful handling of CUDA failure
         try:
@@ -75,3 +81,16 @@ class BasketballModels:
         if len(player_crops) > 0:
             return self.team_classifier.predict(player_crops)
         return []
+
+    def get_masks(self, frame, detections):
+        """Generates masks for detections using SAM2."""
+        if self.sam2_model is None or len(detections) == 0:
+            return None
+        
+        # SAM2 via inference can take multiple bboxes
+        # We use the center of the boxes as points or the boxes themselves
+        outputs = self.sam2_model.infer(frame, bboxes=detections.xyxy.tolist())
+        if isinstance(outputs, list):
+            masks = [np.array(out.mask, dtype=bool) for out in outputs]
+            return np.stack(masks) if masks else None
+        return None
