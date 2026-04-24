@@ -2,6 +2,11 @@ import os
 from dotenv import load_dotenv
 import supervision as sv
 
+# Suppress annoying inference warnings for models we don't use
+os.environ["CORE_MODEL_SAM_ENABLED"] = "False"
+os.environ["CORE_MODEL_GAZE_ENABLED"] = "False"
+os.environ["CORE_MODEL_YOLO_WORLD_ENABLED"] = "False"
+
 load_dotenv()
 
 ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
@@ -23,7 +28,7 @@ NUMBER_RECOGNITION_MODEL_PROMPT = "Read the number."
 
 # Performance Flags
 USE_FAST_TEAM_CLASSIFIER = True
-USE_SAM2 = False
+USE_SAM2 = True
 
 # Class IDs
 BALL_IN_BASKET_CLASS_ID = 1
