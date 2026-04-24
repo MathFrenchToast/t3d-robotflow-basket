@@ -53,6 +53,23 @@ If `uv sync` fails with `pycuda` build errors:
    uv sync
    ```
 
+### GPU Not Found (OVH / Turing Instances)
+If `nvidia-smi` returns "No devices were found" or `dmesg` shows `NVRM: RmInitAdapter: Cannot initialize GSP firmware RM`, the GSP firmware is failing to initialize (common on Turing GPUs like RTX 5000 in virtualized environments).
+
+1. **Disable GSP Firmware**:
+   ```bash
+   echo "options nvidia NVreg_EnableGpuFirmware=0" | sudo tee /etc/modprobe.d/nvidia-gsp.conf
+   sudo update-initramfs -u
+   sudo reboot
+   ```
+
+2. **Fix Permissions**:
+   Ensure your user has access to the GPU devices:
+   ```bash
+   sudo usermod -aG video,render $USER
+   # Log out and log back in
+   ```
+
 ## Project Structure
 - `src/config.py`: Thresholds and model IDs.
 - `src/models.py`: Model loading logic.
