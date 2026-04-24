@@ -87,21 +87,47 @@ class BasketballModels:
         return []
 
     def get_masks(self, frame, detections):
+        """Generates masks for detections using SAM2 via the segment_image method."""
         if self.sam2_model is None or len(detections) == 0:
             return None
         
         try:
-            # Ensure bboxes are float32 as expected by many torch-based models
-            bboxes = detections.xyxy.astype(np.float32).tolist()
-            outputs = self.sam2_model.infer(frame, bboxes=bboxes)
+            # Prepare prompts in the format expected by segment_image
+            # xyxy -> center_x, center_y, width, height
+            prompts = []
+            for box in detections.xyxy:
+                x1, y1, x2, y2 = box
+                prompts.append({
+                    "box": {
+                        "x": (x1 + x2) / 2,
+                        "y": (y1 + y2) / 2,
+                        "width": x2 - x1,
+                        "height": y2 - y1
+                    }
+                })
             
-            if isinstance(outputs, list):
-                masks = [np.array(out.mask, dtype=bool) for out in outputs]
-                return np.stack(masks) if masks else None
+            # segment_image returns (logits, scores, low_res_logits)
+            results = self.sam2_model.segment_image(
+                image=frame, 
+                prompts={"prompts": prompts}
+            )
+            
+            # Extract logits (the first element of the tuple)
+            logits = results[0]
+            # Convert logits to binary masks (threshold at 0.0)
+            masks = (logits > 0.0)
+            
+            # If there's only one detection, the shape might be (1, H, W) 
+            # or if multiple (N, H, W). Ensuring it's always (N, H, W).
+            if masks.ndim == 2:
+                masks = masks[None, ...]
+                
+            return masks
         except Exception as e:
             import traceback
-            print(f"SAM2 inference failed with error type: {type(e).__name__}")
+            print(f"SAM2 segmentation failed with error type: {type(e).__name__}")
             print(f"Error details: {e}")
-            traceback.print_exc()
+            # Keep traceback for deep debugging if needed on VM
+            # traceback.print_exc() 
             return None
         return None
