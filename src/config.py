@@ -29,7 +29,7 @@ NUMBER_RECOGNITION_MODEL_PROMPT = "Read the number."
 
 # Performance Flags
 USE_FAST_TEAM_CLASSIFIER = True
-USE_SAM2 = False
+USE_SAM2 = True
 
 # Class IDs
 BALL_IN_BASKET_CLASS_ID = 1

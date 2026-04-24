@@ -24,24 +24,8 @@ def load_court_detection_model():
     return get_model(KEYPOINT_DETECTION_MODEL_ID)
 
 def load_sam2_model():
-    """Loads SAM2 model by bypassing the buggy get_model factory if necessary."""
-    try:
-        # Try the standard way first
-        return get_model(SAM2_MODEL_ID)
-    except TypeError as e:
-        if "multiple values for argument 'model_id'" in str(e):
-            # Bypass the factory and use the model class directly
-            try:
-                from inference.models.sam2.segment_anything_2 import SegmentAnything2
-                # We instantiate without the factory to avoid the double argument bug
-                return SegmentAnything2(
-                    model_id=SAM2_MODEL_ID, 
-                    api_key=ROBOFLOW_API_KEY
-                )
-            except Exception as e2:
-                print(f"Failed to bypass SAM2 factory: {e2}")
-                raise e
-        raise e
+    """Loads SAM2 model using the standard factory."""
+    return get_model(SAM2_MODEL_ID)
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
