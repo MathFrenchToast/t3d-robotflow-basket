@@ -14,16 +14,16 @@ from src.config import (
 )
 
 def load_player_detection_model():
-    return get_model(model_id=PLAYER_DETECTION_MODEL_ID)
+    return get_model(PLAYER_DETECTION_MODEL_ID)
 
 def load_number_recognition_model():
-    return get_model(model_id=NUMBER_RECOGNITION_MODEL_ID)
+    return get_model(NUMBER_RECOGNITION_MODEL_ID)
 
 def load_court_detection_model():
-    return get_model(model_id=KEYPOINT_DETECTION_MODEL_ID)
+    return get_model(KEYPOINT_DETECTION_MODEL_ID)
 
 def load_sam2_model():
-    return get_model(model_id=SAM2_MODEL_ID)
+    return get_model(SAM2_MODEL_ID)
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""

@@ -4,6 +4,7 @@ import supervision as sv
 
 # Suppress annoying inference warnings for models we don't use
 os.environ["CORE_MODEL_SAM_ENABLED"] = "False"
+os.environ["CORE_MODEL_SAM3_ENABLED"] = "False"
 os.environ["CORE_MODEL_GAZE_ENABLED"] = "False"
 os.environ["CORE_MODEL_YOLO_WORLD_ENABLED"] = "False"
 
