@@ -91,11 +91,17 @@ class BasketballModels:
             return None
         
         try:
-            outputs = self.sam2_model.infer(frame, bboxes=detections.xyxy.tolist())
+            # Ensure bboxes are float32 as expected by many torch-based models
+            bboxes = detections.xyxy.astype(np.float32).tolist()
+            outputs = self.sam2_model.infer(frame, bboxes=bboxes)
+            
             if isinstance(outputs, list):
                 masks = [np.array(out.mask, dtype=bool) for out in outputs]
                 return np.stack(masks) if masks else None
         except Exception as e:
-            print(f"SAM2 inference failed: {e}")
+            import traceback
+            print(f"SAM2 inference failed with error type: {type(e).__name__}")
+            print(f"Error details: {e}")
+            traceback.print_exc()
             return None
         return None
