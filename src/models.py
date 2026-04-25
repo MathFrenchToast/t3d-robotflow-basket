@@ -8,17 +8,24 @@ from src.config import (
     PLAYER_DETECTION_MODEL_ID,
     NUMBER_RECOGNITION_MODEL_ID,
     KEYPOINT_DETECTION_MODEL_ID,
-    USE_FAST_TEAM_CLASSIFIER
+    USE_FAST_TEAM_CLASSIFIER,
+    USE_SAM2,
+    SAM2_MODEL_ID,
+    ROBOFLOW_API_KEY
 )
 
 def load_player_detection_model():
-    return get_model(model_id=PLAYER_DETECTION_MODEL_ID)
+    return get_model(PLAYER_DETECTION_MODEL_ID)
 
 def load_number_recognition_model():
-    return get_model(model_id=NUMBER_RECOGNITION_MODEL_ID)
+    return get_model(NUMBER_RECOGNITION_MODEL_ID)
 
 def load_court_detection_model():
-    return get_model(model_id=KEYPOINT_DETECTION_MODEL_ID)
+    return get_model(KEYPOINT_DETECTION_MODEL_ID)
+
+def load_sam2_model():
+    """Loads SAM2 model using the standard factory."""
+    return get_model(SAM2_MODEL_ID)
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
@@ -31,7 +38,6 @@ class SimpleTeamClassifier:
         if crop is None or crop.size == 0:
             return np.array([0, 0, 0])
         h, w, _ = crop.shape
-        # Focus on the middle 50% of the crop to avoid background noise
         center_crop = crop[int(h*0.25):int(h*0.75), int(w*0.25):int(w*0.75)]
         return np.mean(center_crop, axis=(0, 1))
 
@@ -54,7 +60,13 @@ class BasketballModels:
         self.number_model = load_number_recognition_model()
         self.court_model = load_court_detection_model()
         
-        # Graceful handling of CUDA failure
+        self.sam2_model = None
+        if USE_SAM2:
+            try:
+                self.sam2_model = load_sam2_model()
+            except Exception as e:
+                print(f"Warning: Could not load SAM2 model: {e}. Falling back to bounding boxes.")
+        
         try:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         except Exception:
@@ -66,12 +78,56 @@ class BasketballModels:
             self.team_classifier = TeamClassifier(device=self.device)
 
     def fit_teams(self, player_crops):
-        """Fits the team classifier using the provided player crops."""
         if len(player_crops) > 0:
             self.team_classifier.fit(player_crops)
 
     def predict_teams(self, player_crops):
-        """Predicts the team for each player crop."""
         if len(player_crops) > 0:
             return self.team_classifier.predict(player_crops)
         return []
+
+    def get_masks(self, frame, detections):
+        """Generates masks for detections using SAM2 via the segment_image method."""
+        if self.sam2_model is None or len(detections) == 0:
+            return None
+        
+        try:
+            # Prepare prompts in the format expected by segment_image
+            # xyxy -> center_x, center_y, width, height
+            prompts = []
+            for box in detections.xyxy:
+                x1, y1, x2, y2 = box
+                prompts.append({
+                    "box": {
+                        "x": (x1 + x2) / 2,
+                        "y": (y1 + y2) / 2,
+                        "width": x2 - x1,
+                        "height": y2 - y1
+                    }
+                })
+            
+            # segment_image returns (logits, scores, low_res_logits)
+            results = self.sam2_model.segment_image(
+                image=frame, 
+                prompts={"prompts": prompts}
+            )
+            
+            # Extract logits (the first element of the tuple)
+            logits = results[0]
+            # Convert logits to binary masks (threshold at 0.0)
+            masks = (logits > 0.0)
+            
+            # If there's only one detection, the shape might be (1, H, W) 
+            # or if multiple (N, H, W). Ensuring it's always (N, H, W).
+            if masks.ndim == 2:
+                masks = masks[None, ...]
+                
+            return masks
+        except Exception as e:
+            import traceback
+            print(f"SAM2 segmentation failed with error type: {type(e).__name__}")
+            print(f"Error details: {e}")
+            # Keep traceback for deep debugging if needed on VM
+            # traceback.print_exc() 
+            return None
+        return None
