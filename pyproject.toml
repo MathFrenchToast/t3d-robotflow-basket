@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "inference-gpu[sam]>=1.2.3",
+    "inference-gpu[sam]>=1.2.7",
     "num2words>=0.5.14",
     "opencv-python>=4.10.0.84",
     "python-dotenv>=1.0.1",
@@ -19,3 +19,4 @@ dependencies = [
 
 [tool.uv.sources]
 sports = { git = "https://github.com/roboflow/sports.git", rev = "feat/basketball" }
+

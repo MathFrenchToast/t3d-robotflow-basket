@@ -36,7 +36,7 @@ from this collab notebook from roboflow: https://colab.research.google.com/githu
 
 Run the tracking pipeline on a video:
 ```bash
-uv run python -m src.main --source path/to/video.mp4 --target output.mp4
+uv run python -m src.main --source test/basketball-s.mp4 --target output.mp4
 ```
 
 ## Troubleshooting

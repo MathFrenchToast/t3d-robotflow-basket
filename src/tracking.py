@@ -3,7 +3,13 @@ from sports.basketball import ShotEventTracker
 from sports import ConsecutiveValueTracker
 
 def initialize_trackers(fps: float):
-    byte_tracker = sv.ByteTrack()
+    byte_tracker = sv.ByteTrack(
+        track_activation_threshold=0.35, # Slightly higher to avoid tracking noise
+        lost_track_buffer=int(fps * 2), 
+        minimum_matching_threshold=0.7, # Slightly more conservative matching
+        frame_rate=int(fps),
+        minimum_consecutive_frames=5   # Require 5 frames of detection before ID is assigned
+    )
     
     shot_event_tracker = ShotEventTracker(
         reset_time_frames=int(fps * 1.7),
