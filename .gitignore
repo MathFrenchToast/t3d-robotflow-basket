@@ -7,3 +7,4 @@ __pycache__/
 *.ipynb
 
 output.mp4
+debug_crops/
