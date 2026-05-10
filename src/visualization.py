@@ -21,8 +21,14 @@ class BasketballAnnotator:
         self.vertex_annotator = sv.VertexAnnotator(color=KEYPOINT_COLOR, radius=8)
         
         # Court setup
+        # Use a smaller scale (1.0) so dots and lines don't vanish when resizing
         self.court_config = CourtConfiguration(league=League.NBA)
-        self.court_image = draw_court(config=self.court_config)
+        self.court_image = draw_court(
+            config=self.court_config, 
+            scale=1.0, 
+            line_thickness=5,
+            padding=50
+        )
 
     def annotate_frame(self, frame, detections, labels):
         annotated_frame = self.box_annotator.annotate(
@@ -39,15 +45,41 @@ class BasketballAnnotator:
     def annotate_keypoints(self, frame, keypoints):
         return self.vertex_annotator.annotate(
             scene=frame.copy(),
-            keypoints=keypoints
+            key_points=keypoints
         )
 
-    def draw_court_overlay(self, detections_xy):
-        return draw_points_on_court(
-            config=self.court_config,
-            xy=detections_xy,
-            court=self.court_image.copy()
-        )
+    def draw_court_overlay(self, detections_xy, colors=None):
+        court_image = self.court_image.copy()
+        if detections_xy is None or len(detections_xy) == 0:
+            return court_image
+            
+        if colors is None:
+            # Default to black dots
+            return draw_points_on_court(
+                config=self.court_config,
+                xy=detections_xy,
+                court=court_image,
+                scale=1.0,
+                size=40,
+                padding=50,
+                fill_color=sv.Color.BLACK
+            )
+        
+        # Draw points group by group (since sports doesn't support color lists)
+        unique_colors = set(colors)
+        for color in unique_colors:
+            mask = [c == color for c in colors]
+            points_subset = detections_xy[mask]
+            court_image = draw_points_on_court(
+                config=self.court_config,
+                xy=points_subset,
+                court=court_image,
+                scale=1.0,
+                size=40,
+                padding=50,
+                fill_color=color
+            )
+        return court_image
 
     def overlay_court(self, frame, court_image):
         fh, fw, _ = frame.shape

@@ -34,12 +34,23 @@ class SimpleTeamClassifier:
         self.is_fitted = False
 
     def get_mean_color(self, crop):
-        """Extracts the mean color of a player crop, focusing on the center (jersey)."""
+        """Extracts the mean color of a player crop, ignoring black background (from masks)."""
         if crop is None or crop.size == 0:
             return np.array([0, 0, 0])
+        
+        # Focus on the center (jersey)
         h, w, _ = crop.shape
-        center_crop = crop[int(h*0.25):int(h*0.75), int(w*0.25):int(w*0.75)]
-        return np.mean(center_crop, axis=(0, 1))
+        center_crop = crop[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8)]
+        
+        # Find non-black pixels
+        # A pixel is non-black if at least one channel is > 0
+        non_black_mask = np.any(center_crop > 0, axis=-1)
+        
+        if np.any(non_black_mask):
+            return np.mean(center_crop[non_black_mask], axis=0)
+        else:
+            # Fallback to standard mean if all pixels are black (shouldn't happen with valid crops)
+            return np.mean(center_crop, axis=(0, 1))
 
     def fit(self, player_crops):
         if len(player_crops) < 2:
