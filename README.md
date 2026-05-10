@@ -9,7 +9,7 @@ from this collab notebook from roboflow: https://colab.research.google.com/githu
 - **Modular Design**: Clean separation of configuration, model loading, and processing logic.
 - **Fast Performance**: Optimized for RTX GPUs using `inference-gpu` and `uv`.
 
-## Prerequisites
+## Prerequisites (see below)
 - NVIDIA GPU with drivers installed.
 - [uv](https://github.com/astral-sh/uv) installed.
 
@@ -96,3 +96,35 @@ While this project is inspired by the Roboflow Basketball AI notebook, several a
 
 4. **Identification Logic**:
    - Adapted the mask-based IoU matching from the notebook to work with bounding box IoU, allowing jersey number recognition to function effectively without the overhead of SAM2 masks.
+
+## Installing prerequisites
+
+installing uv, and python 3.12 with it
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+uv python install 3.12
+```
+
+test if nvidia drivers are installed, on ubuntu 24 we target cuda 12.5
+```
+which nvcc
+# if installed ok
+# else
+
+# 1. Install Build Tools and CUDA 12.5
+sudo apt-get install -y build-essential cuda-toolkit-12-5
+
+# 2. Set Up the Environment, update your path to point to the 12.5 version:
+
+echo 'export PATH=/usr/local/cuda-12.5/bin${PATH:+:${PATH}}' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.5/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+source ~/.bashrc
+
+# 3. Verify gcc and cuda compiler
+g++ --version
+nvcc --version
+
+# 4. Retry Sync
+uv sync
+```
