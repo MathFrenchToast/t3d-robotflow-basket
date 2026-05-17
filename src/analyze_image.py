@@ -2,6 +2,7 @@ import cv2
 import json
 import argparse
 import os
+import time
 import numpy as np
 import supervision as sv
 from pathlib import Path
@@ -39,22 +40,26 @@ except ImportError:
     )
     from pipeline import get_masked_crops
 
-def analyze_image(image_path, output_path=None, debug_dir="out"):
+def analyze_image(image_path, output_path=None, debug_dir="out", models=None, annotator=None):
     if not os.path.exists(image_path):
         print(f"Error: Image {image_path} not found.")
-        return None
+        return None, None
 
     # Load image
     frame = cv2.imread(image_path)
     if frame is None:
         print(f"Error: Failed to load image {image_path}")
-        return None
+        return None, None
     
     frame_h, frame_w, _ = frame.shape
     
-    # Initialize models
-    print("Loading models...")
-    models = BasketballModels()
+    # Initialize models if not provided
+    if models is None:
+        print("Loading models...")
+        models = BasketballModels()
+    
+    # Start timing after models are loaded
+    start_time = time.perf_counter()
     
     # 1. Inference - Players and objects
     print("Detecting players and objects...")
@@ -125,11 +130,17 @@ def analyze_image(image_path, output_path=None, debug_dir="out"):
 
     # 5. Court Keypoints
     print("Detecting court keypoints...")
+    # Use the higher anchor confidence for single image to get cleaner landmarks
+    from src.config import KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE
     court_results = models.court_model.infer(
         frame, 
-        confidence=KEYPOINT_DETECTION_MODEL_CONFIDENCE
+        confidence=KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE
     )[0]
     keypoints = sv.KeyPoints.from_inference(court_results)
+    
+    # End timing
+    pipeline_time = time.perf_counter() - start_time
+    print(f"Pipeline execution time: {pipeline_time:.3f} seconds")
     
     # Structure output
     output = {
@@ -137,6 +148,9 @@ def analyze_image(image_path, output_path=None, debug_dir="out"):
             "path": image_path,
             "width": frame_w,
             "height": frame_h
+        },
+        "performance": {
+            "pipeline_time_seconds": round(pipeline_time, 4)
         },
         "detections": {
             "players": [],
@@ -182,14 +196,16 @@ def analyze_image(image_path, output_path=None, debug_dir="out"):
             "confidence": float(rim_detections.confidence[i])
         })
         
+    # Landmark mapping logic
+    model_mapping = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17]
+    
     if len(keypoints) > 0:
-        # Template for keypoint names if available, or just index
-        # Based on pipeline.py mapping: model_mapping = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17]
-        for i in range(len(keypoints.xy[0])):
+        for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
             conf = float(keypoints.confidence[0][i])
-            if conf > KEYPOINT_DETECTION_MODEL_CONFIDENCE:
+            if conf > KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE:
                 output["landmarks"].append({
                     "id": i,
+                    "target_index": model_mapping[i],
                     "x": float(keypoints.xy[0][i][0]),
                     "y": float(keypoints.xy[0][i][1]),
                     "confidence": conf
@@ -200,10 +216,12 @@ def analyze_image(image_path, output_path=None, debug_dir="out"):
             json.dump(output, f, indent=2)
         print(f"✓ Results saved to {output_path}")
     
-    # 6. Visualization (Debug)
-    if debug_dir:
+    # 6. Visualization
+    annotated_frame = frame.copy()
+    if debug_dir or annotator:
         from src.visualization import BasketballAnnotator
-        annotator = BasketballAnnotator()
+        if annotator is None:
+            annotator = BasketballAnnotator()
         
         # Prepare labels
         labels = []
@@ -220,16 +238,64 @@ def analyze_image(image_path, output_path=None, debug_dir="out"):
         if len(rim_detections) > 0:
             annotated_frame = annotator.box_annotator.annotate(annotated_frame, rim_detections)
             
-        # Annotate keypoints
+        # 7. Court Transformation & Overlay (Same logic as pipeline.py)
         if len(keypoints) > 0:
+            vertices_subset = np.array(annotator.court_config.vertices)
+            source_indices = []
+            target_indices = []
+            
+            for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
+                if keypoints.confidence[0][i] > KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE:
+                    source_indices.append(i)
+                    target_indices.append(model_mapping[i])
+
+            if len(source_indices) >= 4:
+                source = keypoints.xy[0][source_indices].astype(np.float32)
+                target = vertices_subset[target_indices].astype(np.float32)
+
+                m, inliers = cv2.findHomography(source, target, cv2.RANSAC, 5.0)
+
+                if m is not None:
+                    # Filter points to only show those within court boundaries
+                    points = player_detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
+                    reshaped_points = points.reshape(-1, 1, 2).astype(np.float32)
+                    transformed_points = cv2.perspectiveTransform(reshaped_points, m)
+
+                    if transformed_points is not None:
+                        transformed_points = transformed_points.reshape(-1, 2)
+                        max_x, max_y = vertices_subset.max(axis=0)
+                        min_x, min_y = vertices_subset.min(axis=0)
+
+                        player_colors = []
+                        for tid in team_ids:
+                            if tid == 0:
+                                player_colors.append(sv.Color.WHITE)
+                            elif tid == 1:
+                                player_colors.append(sv.Color.BLACK)
+                            else:
+                                player_colors.append(sv.Color.GREY)
+
+                        margin = 50
+                        court_mask = (transformed_points[:, 0] >= min_x - margin) & (transformed_points[:, 0] <= max_x + margin)
+                        court_mask &= (transformed_points[:, 1] >= min_y - margin) & (transformed_points[:, 1] <= max_y + margin)
+
+                        active_points = transformed_points[court_mask]
+                        active_colors = [player_colors[i] for i, m in enumerate(court_mask) if m]
+
+                        if len(active_points) > 0:
+                            court_image = annotator.draw_court_overlay(active_points, colors=active_colors)
+                            annotated_frame = annotator.overlay_court(annotated_frame, court_image)
+            
+            # Optionally still annotate keypoints but with the higher threshold
             annotated_frame = annotator.annotate_keypoints(annotated_frame, keypoints)
             
-        image_stem = Path(image_path).stem
-        output_image_path = os.path.join(debug_dir, f"{image_stem}_annotated.jpg")
-        cv2.imwrite(output_image_path, annotated_frame)
-        print(f"✓ Annotated image saved to {output_image_path}")
+        if debug_dir:
+            image_stem = Path(image_path).stem
+            output_image_path = os.path.join(debug_dir, f"{image_stem}_annotated.jpg")
+            cv2.imwrite(output_image_path, annotated_frame)
+            print(f"✓ Annotated image saved to {output_image_path}")
     
-    return output
+    return output, annotated_frame
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze a single basketball image and output JSON")
