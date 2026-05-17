@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basketball AI Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #fff; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; background: #2d2d2d; border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #f97316; font-size: 36px; }
+        .upload-section { background: #3d3d3d; padding: 30px; border-radius: 8px; border: 2px dashed #555; text-align: center; margin-bottom: 30px; transition: 0.3s; }
+        .upload-section:hover { border-color: #f97316; }
+        input[type="file"] { display: none; }
+        .btn { padding: 12px 24px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .btn-primary { background: #f97316; color: #fff; }
+        .btn-primary:hover { background: #ea580c; }
+        .btn-primary:disabled { background: #555; cursor: not-allowed; }
+        .results { display: none; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
+        .result-image { background: #000; border-radius: 8px; overflow: hidden; }
+        .result-image img { width: 100%; display: block; }
+        .result-json { background: #111; padding: 15px; border-radius: 8px; overflow: auto; max-height: 600px; }
+        pre { font-family: monospace; font-size: 13px; color: #10b981; }
+        .spinner { display: none; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s linear infinite; margin-right: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #drop-zone { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 Basketball AI Analyzer</h1>
+            <p>Upload an image for instant detection and analysis</p>
+        </div>
+
+        <div class="upload-section" id="drop-zone">
+            <p>Drag & Drop an image here or click to select</p>
+            <input type="file" id="fileInput" accept="image/*">
+            <div id="file-info" style="margin: 15px 0; color: #f97316; font-weight: bold;"></div>
+            <button class="btn btn-primary" id="analyzeBtn" disabled>
+                <span class="spinner" id="spinner"></span>Analyze Image
+            </button>
+        </div>
+
+        <div class="results" id="results">
+            <div class="result-image">
+                <img id="vizImg" src="" alt="Analysis Result">
+            </div>
+            <div class="result-json">
+                <pre id="jsonOut"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('file-info');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const results = document.getElementById('results');
+        const vizImg = document.getElementById('vizImg');
+        const jsonOut = document.getElementById('jsonOut');
+        const spinner = document.getElementById('spinner');
+
+        dropZone.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileInfo.textContent = `Selected: ${file.name}`;
+                analyzeBtn.disabled = false;
+            }
+        };
+
+        analyzeBtn.onclick = async (e) => {
+            e.stopPropagation();
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            analyzeBtn.disabled = true;
+            spinner.style.display = 'inline-block';
+            results.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    jsonOut.textContent = JSON.stringify(data, null, 2);
+                    vizImg.src = `/api/viz/${data.viz_id}`;
+                    results.style.display = 'grid';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (err) {
+                alert('Analysis failed: ' + err.message);
+            } finally {
+                analyzeBtn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        };
+
+        // Drag and drop handlers
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = '#f97316'; };
+        dropZone.ondragleave = () => { dropZone.style.borderColor = '#555'; };
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#555';
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                fileInput.files = e.dataTransfer.files;
+                fileInfo.textContent = `Selected: ${file.name}`;
+                analyzeBtn.disabled = false;
+            }
+        };
+    </script>
+</body>
+</html>

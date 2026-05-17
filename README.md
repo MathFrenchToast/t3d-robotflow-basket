@@ -6,6 +6,8 @@ from this collab notebook from roboflow: https://colab.research.google.com/githu
 ## Features
 - **Player Detection**: Uses Roboflow Inference with YOLO-based models.
 - **Tracking**: Implements ByteTrack for robust player tracking.
+- **Single Image Analysis**: Direct JSON output of players, teams, jersey numbers, and court landmarks.
+- **Web Interface**: FastAPI-powered UI for real-time image analysis.
 - **Modular Design**: Clean separation of configuration, model loading, and processing logic.
 - **Fast Performance**: Optimized for RTX GPUs using `inference-gpu` and `uv`.
 
@@ -34,10 +36,24 @@ from this collab notebook from roboflow: https://colab.research.google.com/githu
 
 ## Usage
 
+### Video Processing
 Run the tracking pipeline on a video:
 ```bash
 uv run python -m src.main --source test/basketball-s.mp4 --target output.mp4
 ```
+
+### Single Image Analysis (CLI)
+Analyze a single image and output a comprehensive JSON (detections, teams, jersey numbers, court landmarks):
+```bash
+uv run python -m src.main --image path/to/image.jpg --output output.json --debug-dir out
+```
+
+### Web Interface
+Start a FastAPI web server with an HTML upload page for real-time analysis:
+```bash
+./run_web.sh
+```
+Then open `http://localhost:8001` in your browser. This mode keeps models in memory, making subsequent analyses much faster.
 
 ## Troubleshooting
 
@@ -76,6 +92,8 @@ If `nvidia-smi` returns "No devices were found" or `dmesg` shows `NVRM: RmInitAd
 - `src/tracking.py`: ByteTrack and ShotEventTracker initialization.
 - `src/visualization.py`: Annotation and court drawing.
 - `src/pipeline.py`: Main processing loop.
+- `src/analyze_image.py`: Single image analysis logic.
+- `src/web/`: FastAPI application and static assets.
 - `src/main.py`: CLI entry point.
 
 ## Comparison with Original Notebook

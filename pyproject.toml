@@ -5,16 +5,19 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.115.14",
     "inference-gpu[sam]>=1.2.7",
     "num2words>=0.5.14",
     "opencv-python>=4.10.0.84",
     "python-dotenv>=1.0.1",
+    "python-multipart>=0.0.28",
     "rf-sam-2>=1.0.2",
     "scikit-learn",
     "sports",
     "supervision==0.27.0",
     "tqdm>=4.67.3",
     "transformers>=4.46.0",
+    "uvicorn>=0.47.0",
 ]
 
 [tool.uv.sources]

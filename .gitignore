@@ -8,3 +8,5 @@ __pycache__/
 
 output.mp4
 debug_crops/
+
+out/
