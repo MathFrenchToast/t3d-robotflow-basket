@@ -130,11 +130,11 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
 
     # 5. Court Keypoints
     print("Detecting court keypoints...")
-    # Use the higher anchor confidence for single image to get cleaner landmarks
-    from src.config import KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE
+    # Match video pipeline confidence threshold (0.3) for better coverage
+    from src.config import KEYPOINT_DETECTION_MODEL_CONFIDENCE
     court_results = models.court_model.infer(
         frame, 
-        confidence=KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE
+        confidence=KEYPOINT_DETECTION_MODEL_CONFIDENCE
     )[0]
     keypoints = sv.KeyPoints.from_inference(court_results)
     
@@ -197,12 +197,13 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
         })
         
     # Landmark mapping logic
-    model_mapping = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17]
+    # The model 'basketball-court-detection-2/14' returns 33 points matching the template
+    model_mapping = list(range(33))
     
     if len(keypoints) > 0:
         for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
             conf = float(keypoints.confidence[0][i])
-            if conf > KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE:
+            if conf > KEYPOINT_DETECTION_MODEL_CONFIDENCE:
                 output["landmarks"].append({
                     "id": i,
                     "target_index": model_mapping[i],
@@ -245,7 +246,7 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
             target_indices = []
             
             for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
-                if keypoints.confidence[0][i] > KEYPOINT_DETECTION_MODEL_ANCHOR_CONFIDENCE:
+                if keypoints.confidence[0][i] > KEYPOINT_DETECTION_MODEL_CONFIDENCE:
                     source_indices.append(i)
                     target_indices.append(model_mapping[i])
 

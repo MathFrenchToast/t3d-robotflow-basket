@@ -225,9 +225,8 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
             # 7. Court Transformation & Overlay
             if len(keypoints) > 0:
                 vertices_subset = np.array(annotator.court_config.vertices)
-                # Mapping for the first 14 keypoints of the model to the 33-vertex template
-                # 0-11 match 1-to-1, but 12-13 of the model are the half-court line (15 and 17 in template)
-                model_mapping = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17]
+                # The model 'basketball-court-detection-2/14' returns 33 points matching the template
+                model_mapping = list(range(33))
 
                 source_indices = []
                 target_indices = []
