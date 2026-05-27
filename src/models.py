@@ -9,8 +9,8 @@ from src.config import (
     NUMBER_RECOGNITION_MODEL_ID,
     KEYPOINT_DETECTION_MODEL_ID,
     USE_FAST_TEAM_CLASSIFIER,
-    USE_SAM2,
-    SAM2_MODEL_ID,
+    USE_SAM3,
+    SAM3_MODEL_ID,
     ROBOFLOW_API_KEY
 )
 
@@ -23,9 +23,9 @@ def load_number_recognition_model():
 def load_court_detection_model():
     return get_model(KEYPOINT_DETECTION_MODEL_ID)
 
-def load_sam2_model():
-    """Loads SAM2 model using the standard factory."""
-    return get_model(SAM2_MODEL_ID)
+def load_sam3_model():
+    """Loads SAM3 model using the standard factory."""
+    return get_model(SAM3_MODEL_ID)
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
@@ -71,12 +71,12 @@ class BasketballModels:
         self.number_model = load_number_recognition_model()
         self.court_model = load_court_detection_model()
         
-        self.sam2_model = None
-        if USE_SAM2:
+        self.sam3_model = None
+        if USE_SAM3:
             try:
-                self.sam2_model = load_sam2_model()
+                self.sam3_model = load_sam3_model()
             except Exception as e:
-                print(f"Warning: Could not load SAM2 model: {e}. Falling back to bounding boxes.")
+                print(f"Warning: Could not load SAM3 model: {e}. Falling back to bounding boxes.")
         
         try:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -98,18 +98,18 @@ class BasketballModels:
         return []
 
     def get_masks(self, frame, detections):
-        """Generates masks for detections using SAM2 via the segment_image method."""
-        if self.sam2_model is None or len(detections) == 0:
+        """Generates masks for detections using SAM3 via the segment_image method."""
+        if self.sam3_model is None or len(detections) == 0:
             return None
         
         try:
-            # Prepare prompts in the format expected by segment_image
-            # xyxy -> center_x, center_y, width, height
+            # Prepare prompts in the format expected by SAM3 PCS
             prompts = []
             for box in detections.xyxy:
                 x1, y1, x2, y2 = box
                 prompts.append({
-                    "box": {
+                    "type": "box",
+                    "data": {
                         "x": (x1 + x2) / 2,
                         "y": (y1 + y2) / 2,
                         "width": x2 - x1,
@@ -118,9 +118,9 @@ class BasketballModels:
                 })
             
             # segment_image returns (logits, scores, low_res_logits)
-            results = self.sam2_model.segment_image(
+            results = self.sam3_model.segment_image(
                 image=frame, 
-                prompts={"prompts": prompts}
+                prompts=prompts
             )
             
             # Extract logits (the first element of the tuple)
@@ -135,10 +135,7 @@ class BasketballModels:
                 
             return masks
         except Exception as e:
-            import traceback
-            print(f"SAM2 segmentation failed with error type: {type(e).__name__}")
+            print(f"SAM3 segmentation failed with error type: {type(e).__name__}")
             print(f"Error details: {e}")
-            # Keep traceback for deep debugging if needed on VM
-            # traceback.print_exc() 
             return None
         return None
