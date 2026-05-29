@@ -12,8 +12,15 @@ def main():
     parser.add_argument("--output", type=str, default="output.json", help="Path to output JSON (for --image)")
     parser.add_argument("--debug-dir", type=str, default="out", help="Directory for debug output (for --image)")
     parser.add_argument("--frames", type=int, default=None, help="Number of frames to process (for --source)")
+    parser.add_argument("--sam-version", type=str, choices=["sam2", "sam3"], help="SAM model version to use (overrides config)")
     
     args = parser.parse_args()
+    
+    # Update config if sam-version is provided
+    if args.sam_version:
+        from src import config
+        config.SAM_VERSION = args.sam_version
+        print(f"Forcing SAM version to: {args.sam_version}")
     
     if args.image:
         if not os.path.exists(args.image):

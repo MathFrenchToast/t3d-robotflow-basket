@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from inference import get_model
 import torch
 import numpy as np
@@ -9,7 +10,9 @@ from src.config import (
     NUMBER_RECOGNITION_MODEL_ID,
     KEYPOINT_DETECTION_MODEL_ID,
     USE_FAST_TEAM_CLASSIFIER,
-    USE_SAM3,
+    USE_SAM,
+    SAM_VERSION,
+    SAM2_MODEL_ID,
     SAM3_MODEL_ID,
     ROBOFLOW_API_KEY
 )
@@ -23,9 +26,65 @@ def load_number_recognition_model():
 def load_court_detection_model():
     return get_model(KEYPOINT_DETECTION_MODEL_ID)
 
-def load_sam3_model():
-    """Loads SAM3 model using the standard factory."""
-    return get_model(SAM3_MODEL_ID)
+class SAMInterface(ABC):
+    @abstractmethod
+    def segment_image(self, image, detections):
+        pass
+
+class SAM2Model(SAMInterface):
+    def __init__(self):
+        self.model = get_model(SAM2_MODEL_ID)
+
+    def segment_image(self, image, detections):
+        prompts = []
+        for box in detections.xyxy:
+            x1, y1, x2, y2 = box
+            prompts.append({
+                "box": {
+                    "x": (x1 + x2) / 2,
+                    "y": (y1 + y2) / 2,
+                    "width": x2 - x1,
+                    "height": y2 - y1
+                }
+            })
+        
+        results = self.model.segment_image(
+            image=image, 
+            prompts={"prompts": prompts}
+        )
+        logits = results[0]
+        masks = (logits > 0.0)
+        if masks.ndim == 2:
+            masks = masks[None, ...]
+        return masks
+
+class SAM3Model(SAMInterface):
+    def __init__(self):
+        self.model = get_model(SAM3_MODEL_ID)
+
+    def segment_image(self, image, detections):
+        prompts = []
+        for box in detections.xyxy:
+            x1, y1, x2, y2 = box
+            prompts.append({
+                "type": "box",
+                "data": {
+                    "x": (x1 + x2) / 2,
+                    "y": (y1 + y2) / 2,
+                    "width": x2 - x1,
+                    "height": y2 - y1
+                }
+            })
+        
+        results = self.model.segment_image(
+            image=image, 
+            prompts=prompts
+        )
+        logits = results[0]
+        masks = (logits > 0.0)
+        if masks.ndim == 2:
+            masks = masks[None, ...]
+        return masks
 
 class SimpleTeamClassifier:
     """A fast, color-based team classifier using K-Means."""
@@ -66,17 +125,26 @@ class SimpleTeamClassifier:
         return self.kmeans.predict(colors)
 
 class BasketballModels:
-    def __init__(self):
+    def __init__(self, sam_version=None):
         self.player_model = load_player_detection_model()
         self.number_model = load_number_recognition_model()
         self.court_model = load_court_detection_model()
         
-        self.sam3_model = None
-        if USE_SAM3:
+        self.sam_model = None
+        current_sam_version = sam_version or SAM_VERSION
+        
+        if USE_SAM:
             try:
-                self.sam3_model = load_sam3_model()
+                if current_sam_version == "sam2":
+                    print("Loading SAM2 model...")
+                    self.sam_model = SAM2Model()
+                elif current_sam_version == "sam3":
+                    print("Loading SAM3 model...")
+                    self.sam_model = SAM3Model()
+                else:
+                    print(f"Warning: Unknown SAM version '{current_sam_version}'. Falling back to no SAM.")
             except Exception as e:
-                print(f"Warning: Could not load SAM3 model: {e}. Falling back to bounding boxes.")
+                print(f"Warning: Could not load SAM model ({current_sam_version}): {e}. Falling back to bounding boxes.")
         
         try:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -98,44 +166,13 @@ class BasketballModels:
         return []
 
     def get_masks(self, frame, detections):
-        """Generates masks for detections using SAM3 via the segment_image method."""
-        if self.sam3_model is None or len(detections) == 0:
+        """Generates masks for detections using the selected SAM model."""
+        if self.sam_model is None or len(detections) == 0:
             return None
         
         try:
-            # Prepare prompts in the format expected by SAM3 PCS
-            prompts = []
-            for box in detections.xyxy:
-                x1, y1, x2, y2 = box
-                prompts.append({
-                    "type": "box",
-                    "data": {
-                        "x": (x1 + x2) / 2,
-                        "y": (y1 + y2) / 2,
-                        "width": x2 - x1,
-                        "height": y2 - y1
-                    }
-                })
-            
-            # segment_image returns (logits, scores, low_res_logits)
-            results = self.sam3_model.segment_image(
-                image=frame, 
-                prompts=prompts
-            )
-            
-            # Extract logits (the first element of the tuple)
-            logits = results[0]
-            # Convert logits to binary masks (threshold at 0.0)
-            masks = (logits > 0.0)
-            
-            # If there's only one detection, the shape might be (1, H, W) 
-            # or if multiple (N, H, W). Ensuring it's always (N, H, W).
-            if masks.ndim == 2:
-                masks = masks[None, ...]
-                
-            return masks
+            return self.sam_model.segment_image(frame, detections)
         except Exception as e:
-            print(f"SAM3 segmentation failed with error type: {type(e).__name__}")
+            print(f"SAM segmentation failed with error type: {type(e).__name__}")
             print(f"Error details: {e}")
             return None
-        return None
