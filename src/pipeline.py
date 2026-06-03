@@ -70,7 +70,7 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                 iou_threshold=PLAYER_DETECTION_MODEL_IOU_THRESHOLD
             )[0]
             all_detections = sv.Detections.from_inference(player_results).with_nms(
-                threshold=0.5, class_agnostic=True
+                threshold=0.8, class_agnostic=True
             )
             
             # Filter detections for players and numbers separately
