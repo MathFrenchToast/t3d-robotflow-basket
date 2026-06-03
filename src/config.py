@@ -2,13 +2,14 @@ import os
 from dotenv import load_dotenv
 import supervision as sv
 
-# Suppress annoying inference warnings for models we don't use
-os.environ["CORE_MODEL_SAM_ENABLED"] = "False"
-os.environ["CORE_MODEL_SAM2_ENABLED"] = "False"
-os.environ["CORE_MODEL_GAZE_ENABLED"] = "False"
-os.environ["CORE_MODEL_YOLO_WORLD_ENABLED"] = "False"
-
 load_dotenv()
+
+# Suppress annoying inference warnings for models we don't use
+os.environ.setdefault("CORE_MODEL_SAM_ENABLED", "False")
+os.environ.setdefault("CORE_MODEL_SAM2_ENABLED", "False")
+os.environ.setdefault("CORE_MODEL_SAM3_ENABLED", "False")
+os.environ.setdefault("CORE_MODEL_GAZE_ENABLED", "False")
+os.environ.setdefault("CORE_MODEL_YOLO_WORLD_ENABLED", "False")
 
 ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
 
@@ -30,8 +31,11 @@ NUMBER_RECOGNITION_MODEL_PROMPT = "Read the number."
 
 # Performance Flags
 USE_FAST_TEAM_CLASSIFIER = True
-USE_SAM = True
-SAM_VERSION = "sam3" # Options: "sam2", "sam3"
+
+USE_SAM2 = os.environ.get("CORE_MODEL_SAM2_ENABLED", "False").lower() in ("true", "1", "yes")
+USE_SAM3 = os.environ.get("CORE_MODEL_SAM3_ENABLED", "False").lower() in ("true", "1", "yes")
+USE_SAM = USE_SAM2 or USE_SAM3
+SAM_VERSION = "sam3" if USE_SAM3 else "sam2" if USE_SAM2 else None
 
 # Class IDs
 BALL_CLASS_ID = 0

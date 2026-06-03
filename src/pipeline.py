@@ -15,7 +15,7 @@ from src.config import (
     JUMP_SHOT_CLASS_ID,
     LAYUP_DUNK_CLASS_ID,
     PLAYER_CLASS_IDS,
-    USE_SAM3
+    USE_SAM
 )
 from src.models import BasketballModels
 from src.tracking import initialize_trackers
@@ -90,8 +90,8 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
             # 2. Track Players
             detections = byte_tracker.update_with_detections(detections)
             
-            # 2.1 Refine with SAM3 Masks (Optional but recommended for accuracy)
-            if USE_SAM3 and len(detections) > 0:
+            # 2.1 Refine with SAM Masks (Optional but recommended for accuracy)
+            if USE_SAM and len(detections) > 0:
                 masks = models.get_masks(frame, detections)
                 if masks is not None:
                     detections.mask = masks
@@ -111,7 +111,7 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
             # 4. Team Classification Calibration
             if not is_team_classifier_fitted:
                 if len(detections) > 0:
-                    factor = 1.0 if USE_SAM3 else 0.4
+                    factor = 1.0 if USE_SAM else 0.4
                     scaled_detections = sv.Detections(
                         xyxy=sv.scale_boxes(xyxy=detections.xyxy, factor=factor),
                         mask=detections.mask,
@@ -133,7 +133,7 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
             
             # 5. Team & Jersey Identification
             if is_team_classifier_fitted:
-                factor = 1.0 if USE_SAM3 else 0.4
+                factor = 1.0 if USE_SAM else 0.4
                 scaled_detections = sv.Detections(
                     xyxy=sv.scale_boxes(xyxy=detections.xyxy, factor=factor),
                     mask=detections.mask,
