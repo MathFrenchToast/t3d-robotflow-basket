@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.14",
-    "inference-gpu[sam]>=1.2.10",
+    "inference-gpu[sam]>=1.2.13",
     "num2words>=0.5.14",
     "opencv-python>=4.10.0.84",
     "python-dotenv>=1.0.1",
