@@ -10,12 +10,16 @@ def main():
     parser.add_argument("--image", type=str, help="Path to source image")
     parser.add_argument("--target", type=str, default="result.mp4", help="Path to target video (for --source)")
     parser.add_argument("--output", type=str, default="output.json", help="Path to output JSON (for --image)")
-    parser.add_argument("--debug-dir", type=str, default="out", help="Directory for debug output")
+    parser.add_argument("--debug-dir", type=str, default=None, help="Directory for debug output (defaults to out/debug if --debug else out)")
     parser.add_argument("--frames", type=int, default=None, help="Number of frames to process (for --source)")
     parser.add_argument("--sam-version", type=str, choices=["sam2", "sam3"], help="SAM model version to use (overrides config)")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug outputs (crops, masks)")
     
     args = parser.parse_args()
+    
+    # Set default debug directory dynamically
+    if args.debug_dir is None:
+        args.debug_dir = "out/debug" if args.debug else "out"
     
     # Update config if sam-version is provided
     if args.sam_version:
