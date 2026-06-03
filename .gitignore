@@ -10,3 +10,6 @@ output.mp4
 debug_crops/
 
 out/
+out_test*/
+test_*.json
+output.json
