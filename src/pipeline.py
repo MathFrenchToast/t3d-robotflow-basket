@@ -69,7 +69,9 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                 confidence=PLAYER_DETECTION_MODEL_CONFIDENCE, 
                 iou_threshold=PLAYER_DETECTION_MODEL_IOU_THRESHOLD
             )[0]
-            all_detections = sv.Detections.from_inference(player_results)
+            all_detections = sv.Detections.from_inference(player_results).with_nms(
+                threshold=0.5, class_agnostic=True
+            )
             
             # Filter detections for players and numbers separately
             # We only track and classify teams for objects in PLAYER_CLASS_IDS
