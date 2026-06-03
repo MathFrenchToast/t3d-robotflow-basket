@@ -97,9 +97,9 @@ class SimpleTeamClassifier:
         if crop is None or crop.size == 0:
             return np.array([0, 0, 0])
         
-        # Focus on the center (jersey)
+        # Focus on the jersey (roughly 15% to 60% height)
         h, w, _ = crop.shape
-        center_crop = crop[int(h*0.2):int(h*0.8), int(w*0.2):int(w*0.8)]
+        center_crop = crop[int(h*0.15):int(h*0.60), int(w*0.2):int(w*0.8)]
         
         # Find non-black pixels
         # A pixel is non-black if at least one channel is > 0

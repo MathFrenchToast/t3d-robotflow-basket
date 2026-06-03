@@ -105,7 +105,11 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
             image_stem = Path(image_path).stem
             for i, (crop, tid) in enumerate(zip(player_crops, team_ids)):
                 if crop.size > 0:
-                    cv2.imwrite(os.path.join(crops_dir, f"{image_stem}_crop_{i}_team{tid}.png"), crop)
+                    # Isolate the jersey (roughly 15% to 60% of height, 20% to 80% of width)
+                    h, w, _ = crop.shape
+                    jersey_crop = crop[int(h*0.15):int(h*0.60), int(w*0.2):int(w*0.8)]
+                    if jersey_crop.size > 0:
+                        cv2.imwrite(os.path.join(crops_dir, f"{image_stem}_crop_{i}_team{tid}.png"), jersey_crop)
     else:
         team_ids = []
 

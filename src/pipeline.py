@@ -131,7 +131,11 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                         calib_dir = os.path.join(debug_dir, "crops", "calib")
                         os.makedirs(calib_dir, exist_ok=True)
                         for i, crop in enumerate(calibration_crops[:10]):
-                            cv2.imwrite(os.path.join(calib_dir, f"calib_{i}.png"), crop)
+                            if crop.size > 0:
+                                h, w, _ = crop.shape
+                                jersey_crop = crop[int(h*0.15):int(h*0.60), int(w*0.2):int(w*0.8)]
+                                if jersey_crop.size > 0:
+                                    cv2.imwrite(os.path.join(calib_dir, f"calib_{i}.png"), jersey_crop)
                     calibration_crops = []
             
             # 5. Team & Jersey Identification
@@ -156,7 +160,10 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                     os.makedirs(pred_dir, exist_ok=True)
                     for i, (crop, tid, team) in enumerate(zip(player_crops, detections.tracker_id, team_ids)):
                         if crop.size > 0:
-                            cv2.imwrite(os.path.join(pred_dir, f"frame_{frame_index}_id{tid}_team{team}.png"), crop)
+                            h, w, _ = crop.shape
+                            jersey_crop = crop[int(h*0.15):int(h*0.60), int(w*0.2):int(w*0.8)]
+                            if jersey_crop.size > 0:
+                                cv2.imwrite(os.path.join(pred_dir, f"frame_{frame_index}_id{tid}_team{team}.png"), jersey_crop)
 
             # Jersey Number Recognition (every 5 frames to save GPU)
             if frame_index % 5 == 0 and len(number_detections) > 0 and len(detections) > 0:
