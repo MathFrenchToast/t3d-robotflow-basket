@@ -210,41 +210,12 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                     if valid_matched_player_ids:
                         number_validator.update(tracker_ids=valid_matched_player_ids, values=valid_matched_numbers)
 
-            # 6. Annotation & Team Refinement
-            validated_numbers = number_validator.get_validated(tracker_ids=detections.tracker_id)
-            validated_teams = team_validator.get_validated(tracker_ids=detections.tracker_id)
-            
-            # Refine teams: only 5 players per team max, prioritize by confidence
-            if len(detections) > 0:
-                team_counts = {0: 0, 1: 0}
-                conf_indices = np.argsort(-detections.confidence)
-                refined_teams = [None] * len(detections)
-                for idx in conf_indices:
-                    team = validated_teams[idx]
-                    try:
-                        if team is not None:
-                            team_int = int(team)
-                            if team_int in team_counts and team_counts[team_int] < 5:
-                                refined_teams[idx] = team_int
-                                team_counts[team_int] += 1
-                    except (ValueError, TypeError):
-                        continue
-                validated_teams = refined_teams
-
-            labels = []
-            for tid, num, team in zip(detections.tracker_id, validated_numbers, validated_teams):
-                team_label = f"T{team}" if team is not None else ""
-                num_label = f"#{num}" if num is not None else f"ID{tid}"
-                labels.append(f"{team_label} {num_label}")
-            
-            annotated_frame = annotator.annotate_frame(frame, detections, labels)
-            
-            # 7. Court Transformation & Overlay
+            # 6. Court Transformation & Homography
+            court_mask = np.ones(len(detections), dtype=bool) # Default to True
+            transformed_points = None
             if len(keypoints) > 0:
                 vertices_subset = np.array(annotator.court_config.vertices)
-                # The model 'basketball-court-detection-2/14' returns 33 points matching the template
                 model_mapping = list(range(33))
-
                 source_indices = []
                 target_indices = []
                 for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
@@ -255,45 +226,67 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                 if len(source_indices) >= 4:
                     source = keypoints.xy[0][source_indices].astype(np.float32)
                     target = vertices_subset[target_indices].astype(np.float32)
-
-                    # Use RANSAC for robust homography calculation
                     m, inliers = cv2.findHomography(source, target, cv2.RANSAC, 5.0)
 
                     if m is not None:
                         points = detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
-                        # Manual transform since ViewTransformer doesn't support custom matrices easily
                         reshaped_points = points.reshape(-1, 1, 2).astype(np.float32)
                         transformed_points = cv2.perspectiveTransform(reshaped_points, m)
 
                         if transformed_points is not None:
                             transformed_points = transformed_points.reshape(-1, 2)
+                            max_x, max_y = vertices_subset.max(axis=0)
+                            min_x, min_y = vertices_subset.min(axis=0)
+                            margin = 50
+                            court_mask = (transformed_points[:, 0] >= min_x - margin) & (transformed_points[:, 0] <= max_x + margin)
+                            court_mask &= (transformed_points[:, 1] >= min_y - margin) & (transformed_points[:, 1] <= max_y + margin)
 
-                            # Filter points to only show those within court boundaries
-                            if len(transformed_points) > 0:
-                                max_x, max_y = vertices_subset.max(axis=0)
-                                min_x, min_y = vertices_subset.min(axis=0)
+            # 7. Annotation & Team Refinement
+            validated_numbers = number_validator.get_validated(tracker_ids=detections.tracker_id)
+            validated_teams = team_validator.get_validated(tracker_ids=detections.tracker_id)
+            
+            # Refine teams: only 5 players per team max, prioritize on-court players, then by confidence
+            if len(detections) > 0:
+                team_counts = {0: 0, 1: 0}
+                conf_indices = np.lexsort((-detections.confidence, -court_mask.astype(int)))
+                refined_teams = [None] * len(detections)
+                for idx in conf_indices:
+                    team = validated_teams[idx]
+                    try:
+                        if team is not None:
+                            team_int = int(team)
+                            if team_counts.get(team_int, 0) < 5:
+                                refined_teams[idx] = team_int
+                                team_counts[team_int] += 1
+                    except (ValueError, TypeError):
+                        continue
+                validated_teams = refined_teams
 
-                                # Determine colors for each player
-                                player_colors = []
-                                for team in validated_teams:
-                                    if team == 0:
-                                        player_colors.append(sv.Color.WHITE)
-                                    elif team == 1:
-                                        player_colors.append(sv.Color.BLACK)
-                                    else:
-                                        player_colors.append(sv.Color.GREY)
+            labels = []
+            for tid, num, team in zip(detections.tracker_id, validated_numbers, validated_teams):
+                team_label = f"T{team}" if team is not None else ""
+                num_label = f"#{num}" if num is not None else f"ID{tid}"
+                labels.append(f"{team_label} {num_label}".strip())
+            
+            annotated_frame = annotator.annotate_frame(frame, detections, labels)
+            
+            # 8. Court Overlay
+            if transformed_points is not None and len(transformed_points) > 0:
+                player_colors = []
+                for team in validated_teams:
+                    if team == 0:
+                        player_colors.append(sv.Color.WHITE)
+                    elif team == 1:
+                        player_colors.append(sv.Color.BLACK)
+                    else:
+                        player_colors.append(sv.Color.GREY)
 
-                                # Boundary check (with slight margin)
-                                margin = 50
-                                court_mask = (transformed_points[:, 0] >= min_x - margin) & (transformed_points[:, 0] <= max_x + margin)
-                                court_mask &= (transformed_points[:, 1] >= min_y - margin) & (transformed_points[:, 1] <= max_y + margin)
+                active_points = transformed_points[court_mask]
+                active_colors = [player_colors[i] for i, m in enumerate(court_mask) if m]
 
-                                active_points = transformed_points[court_mask]
-                                active_colors = [player_colors[i] for i, m in enumerate(court_mask) if m]
-
-                                if len(active_points) > 0:
-                                    court_image = annotator.draw_court_overlay(active_points, colors=active_colors)
-                                    annotated_frame = annotator.overlay_court(annotated_frame, court_image)
+                if len(active_points) > 0:
+                    court_image = annotator.draw_court_overlay(active_points, colors=active_colors)
+                    annotated_frame = annotator.overlay_court(annotated_frame, court_image)
 
 
             sink.write_frame(annotated_frame)

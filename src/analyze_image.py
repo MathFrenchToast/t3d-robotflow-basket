@@ -142,9 +142,8 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
             if iou[p_idx][best_n_idx] > 0.2:
                 player_numbers[p_idx] = numbers[best_n_idx]
 
-    # 5. Court Keypoints
+    # 5. Court Transformation & Homography
     print("Detecting court keypoints...")
-    # Match video pipeline confidence threshold (0.3) for better coverage
     from src.config import KEYPOINT_DETECTION_MODEL_CONFIDENCE
     court_results = models.court_model.infer(
         frame, 
@@ -152,6 +151,58 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
     )[0]
     keypoints = sv.KeyPoints.from_inference(court_results)
     
+    court_mask = np.ones(len(player_detections), dtype=bool) # Default to True
+    transformed_points = None
+    model_mapping = list(range(33))
+    
+    if annotator is None:
+        from src.visualization import BasketballAnnotator
+        annotator = BasketballAnnotator()
+
+    if len(keypoints) > 0:
+        vertices_subset = np.array(annotator.court_config.vertices)
+        source_indices = []
+        target_indices = []
+        for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
+            if keypoints.confidence[0][i] > KEYPOINT_DETECTION_MODEL_CONFIDENCE:
+                source_indices.append(i)
+                target_indices.append(model_mapping[i])
+
+        if len(source_indices) >= 4:
+            source = keypoints.xy[0][source_indices].astype(np.float32)
+            target = vertices_subset[target_indices].astype(np.float32)
+            m, inliers = cv2.findHomography(source, target, cv2.RANSAC, 5.0)
+
+            if m is not None:
+                points = player_detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
+                reshaped_points = points.reshape(-1, 1, 2).astype(np.float32)
+                transformed_points = cv2.perspectiveTransform(reshaped_points, m)
+
+                if transformed_points is not None:
+                    transformed_points = transformed_points.reshape(-1, 2)
+                    max_x, max_y = vertices_subset.max(axis=0)
+                    min_x, min_y = vertices_subset.min(axis=0)
+                    margin = 50
+                    court_mask = (transformed_points[:, 0] >= min_x - margin) & (transformed_points[:, 0] <= max_x + margin)
+                    court_mask &= (transformed_points[:, 1] >= min_y - margin) & (transformed_points[:, 1] <= max_y + margin)
+
+    # Refine teams: only 5 players per team max, prioritize on-court players
+    if len(player_detections) > 0:
+        team_counts = {0: 0, 1: 0}
+        conf_indices = np.lexsort((-player_detections.confidence, -court_mask.astype(int)))
+        refined_teams = [None] * len(player_detections)
+        for idx in conf_indices:
+            team = team_ids[idx]
+            try:
+                if team is not None:
+                    team_int = int(team)
+                    if team_counts.get(team_int, 0) < 5:
+                        refined_teams[idx] = team_int
+                        team_counts[team_int] += 1
+            except (ValueError, TypeError):
+                continue
+        team_ids = refined_teams
+
     # End timing
     pipeline_time = time.perf_counter() - start_time
     print(f"Pipeline execution time: {pipeline_time:.3f} seconds")
@@ -185,7 +236,7 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
     
     for i in range(len(player_detections)):
         bbox = player_detections.xyxy[i].tolist()
-        team = int(team_ids[i]) if i < len(team_ids) else None
+        team = int(team_ids[i]) if i < len(team_ids) and team_ids[i] is not None else None
         number = player_numbers[i]
         class_id = int(player_detections.class_id[i])
         role = class_id_to_name.get(class_id, "player")
@@ -253,56 +304,26 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
         if len(rim_detections) > 0:
             annotated_frame = annotator.box_annotator.annotate(annotated_frame, rim_detections)
             
-        # 7. Court Transformation & Overlay (Same logic as pipeline.py)
-        if len(keypoints) > 0:
-            vertices_subset = np.array(annotator.court_config.vertices)
-            source_indices = []
-            target_indices = []
-            
-            for i in range(min(len(model_mapping), len(keypoints.xy[0]))):
-                if keypoints.confidence[0][i] > KEYPOINT_DETECTION_MODEL_CONFIDENCE:
-                    source_indices.append(i)
-                    target_indices.append(model_mapping[i])
+        # 7. Court Overlay
+        if transformed_points is not None and len(transformed_points) > 0:
+            player_colors = []
+            for tid in team_ids:
+                if tid == 0:
+                    player_colors.append(sv.Color.WHITE)
+                elif tid == 1:
+                    player_colors.append(sv.Color.BLACK)
+                else:
+                    player_colors.append(sv.Color.GREY)
 
-            if len(source_indices) >= 4:
-                source = keypoints.xy[0][source_indices].astype(np.float32)
-                target = vertices_subset[target_indices].astype(np.float32)
+            active_points = transformed_points[court_mask]
+            active_colors = [player_colors[i] for i, m in enumerate(court_mask) if m]
 
-                m, inliers = cv2.findHomography(source, target, cv2.RANSAC, 5.0)
-
-                if m is not None:
-                    # Filter points to only show those within court boundaries
-                    points = player_detections.get_anchors_coordinates(anchor=sv.Position.BOTTOM_CENTER)
-                    reshaped_points = points.reshape(-1, 1, 2).astype(np.float32)
-                    transformed_points = cv2.perspectiveTransform(reshaped_points, m)
-
-                    if transformed_points is not None:
-                        transformed_points = transformed_points.reshape(-1, 2)
-                        max_x, max_y = vertices_subset.max(axis=0)
-                        min_x, min_y = vertices_subset.min(axis=0)
-
-                        player_colors = []
-                        for tid in team_ids:
-                            if tid == 0:
-                                player_colors.append(sv.Color.WHITE)
-                            elif tid == 1:
-                                player_colors.append(sv.Color.BLACK)
-                            else:
-                                player_colors.append(sv.Color.GREY)
-
-                        margin = 50
-                        court_mask = (transformed_points[:, 0] >= min_x - margin) & (transformed_points[:, 0] <= max_x + margin)
-                        court_mask &= (transformed_points[:, 1] >= min_y - margin) & (transformed_points[:, 1] <= max_y + margin)
-
-                        active_points = transformed_points[court_mask]
-                        active_colors = [player_colors[i] for i, m in enumerate(court_mask) if m]
-
-                        if len(active_points) > 0:
-                            court_image = annotator.draw_court_overlay(active_points, colors=active_colors)
-                            annotated_frame = annotator.overlay_court(annotated_frame, court_image)
-            
-            # Optionally still annotate keypoints but with the higher threshold
-            annotated_frame = annotator.annotate_keypoints(annotated_frame, keypoints)
+            if len(active_points) > 0:
+                court_image = annotator.draw_court_overlay(active_points, colors=active_colors)
+                annotated_frame = annotator.overlay_court(annotated_frame, court_image)
+        
+        # Optionally still annotate keypoints but with the higher threshold
+        annotated_frame = annotator.annotate_keypoints(annotated_frame, keypoints)
             
         if debug_dir:
             image_stem = Path(image_path).stem
