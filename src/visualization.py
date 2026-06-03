@@ -18,6 +18,7 @@ class BasketballAnnotator:
             color=PLAYER_COLOR_PALETTE, 
             text_color=sv.Color.BLACK
         )
+        self.mask_annotator = sv.MaskAnnotator(color=PLAYER_COLOR_PALETTE, opacity=0.5)
         self.vertex_annotator = sv.VertexAnnotator(color=KEYPOINT_COLOR, radius=8)
         
         # Court setup
@@ -31,8 +32,14 @@ class BasketballAnnotator:
         )
 
     def annotate_frame(self, frame, detections, labels):
+        annotated_frame = frame.copy()
+        if detections.mask is not None:
+            annotated_frame = self.mask_annotator.annotate(
+                scene=annotated_frame,
+                detections=detections
+            )
         annotated_frame = self.box_annotator.annotate(
-            scene=frame.copy(), 
+            scene=annotated_frame, 
             detections=detections
         )
         annotated_frame = self.label_annotator.annotate(

@@ -10,9 +10,10 @@ def main():
     parser.add_argument("--image", type=str, help="Path to source image")
     parser.add_argument("--target", type=str, default="result.mp4", help="Path to target video (for --source)")
     parser.add_argument("--output", type=str, default="output.json", help="Path to output JSON (for --image)")
-    parser.add_argument("--debug-dir", type=str, default="out", help="Directory for debug output (for --image)")
+    parser.add_argument("--debug-dir", type=str, default="out", help="Directory for debug output")
     parser.add_argument("--frames", type=int, default=None, help="Number of frames to process (for --source)")
     parser.add_argument("--sam-version", type=str, choices=["sam2", "sam3"], help="SAM model version to use (overrides config)")
+    parser.add_argument("--debug", action="store_true", help="Enable verbose debug outputs (crops, masks)")
     
     args = parser.parse_args()
     
@@ -31,7 +32,7 @@ def main():
             os.makedirs(args.debug_dir)
             
         try:
-            analyze_image(args.image, args.output, args.debug_dir)
+            analyze_image(args.image, args.output, args.debug_dir, debug=args.debug)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -41,8 +42,12 @@ def main():
         if not os.path.exists(args.source):
             print(f"Error: Source video {args.source} not found.")
             sys.exit(1)
+        
+        if args.debug and not os.path.exists(args.debug_dir):
+            os.makedirs(args.debug_dir)
+            
         try:
-            run_pipeline(args.source, args.target, max_frames=args.frames)
+            run_pipeline(args.source, args.target, max_frames=args.frames, debug=args.debug, debug_dir=args.debug_dir)
         except Exception as e:
             import traceback
             traceback.print_exc()

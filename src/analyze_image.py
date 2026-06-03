@@ -40,7 +40,7 @@ except ImportError:
     )
     from pipeline import get_masked_crops
 
-def analyze_image(image_path, output_path=None, debug_dir="out", models=None, annotator=None):
+def analyze_image(image_path, output_path=None, debug_dir="out", models=None, annotator=None, debug=False):
     if not os.path.exists(image_path):
         print(f"Error: Image {image_path} not found.")
         return None, None
@@ -98,6 +98,14 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
         # Fit on this image's players
         models.fit_teams(player_crops)
         team_ids = models.predict_teams(player_crops)
+
+        if debug and debug_dir:
+            crops_dir = os.path.join(debug_dir, "crops")
+            os.makedirs(crops_dir, exist_ok=True)
+            image_stem = Path(image_path).stem
+            for i, (crop, tid) in enumerate(zip(player_crops, team_ids)):
+                if crop.size > 0:
+                    cv2.imwrite(os.path.join(crops_dir, f"{image_stem}_crop_{i}_team{tid}.png"), crop)
     else:
         team_ids = []
 

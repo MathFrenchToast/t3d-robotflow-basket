@@ -46,7 +46,7 @@ def get_masked_crops(frame, detections):
         crops.append(crop)
     return crops
 
-def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int = None):
+def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int = None, debug: bool = False, debug_dir: str = "out"):
     models = BasketballModels()
     video_info = sv.VideoInfo.from_video_path(source_video_path)
     byte_tracker, shot_tracker, number_validator, team_validator = initialize_trackers(video_info.fps)
@@ -83,9 +83,9 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
             keypoints = sv.KeyPoints.from_inference(court_results)
             
             # Save debug court detection image
-            if frame_index % 10 == 0 and len(keypoints) > 0:
+            if debug and frame_index % 10 == 0 and len(keypoints) > 0:
                 debug_court_frame = annotator.annotate_keypoints(frame, keypoints)
-                cv2.imwrite(f"debug_crops/court_frame_{frame_index}.jpg", debug_court_frame)
+                cv2.imwrite(os.path.join(debug_dir, f"court_frame_{frame_index}.jpg"), debug_court_frame)
             
             # 2. Track Players
             detections = byte_tracker.update_with_detections(detections)
@@ -127,8 +127,11 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                     models.fit_teams(calibration_crops)
                     is_team_classifier_fitted = True
                     # Optional: save some calibration crops for debug
-                    for i, crop in enumerate(calibration_crops[:10]):
-                        cv2.imwrite(f"debug_crops/players/calib_{i}.png", crop)
+                    if debug:
+                        calib_dir = os.path.join(debug_dir, "crops", "calib")
+                        os.makedirs(calib_dir, exist_ok=True)
+                        for i, crop in enumerate(calibration_crops[:10]):
+                            cv2.imwrite(os.path.join(calib_dir, f"calib_{i}.png"), crop)
                     calibration_crops = []
             
             # 5. Team & Jersey Identification
@@ -148,10 +151,12 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                 team_validator.update(tracker_ids=detections.tracker_id, values=team_ids)
                 
                 # Save some prediction crops for debug (first 10 frames after calib)
-                if frame_index < 50:
+                if debug and frame_index < 50:
+                    pred_dir = os.path.join(debug_dir, "crops", "pred")
+                    os.makedirs(pred_dir, exist_ok=True)
                     for i, (crop, tid, team) in enumerate(zip(player_crops, detections.tracker_id, team_ids)):
                         if crop.size > 0:
-                            cv2.imwrite(f"debug_crops/players/frame_{frame_index}_id{tid}_team{team}.png", crop)
+                            cv2.imwrite(os.path.join(pred_dir, f"frame_{frame_index}_id{tid}_team{team}.png"), crop)
 
             # Jersey Number Recognition (every 5 frames to save GPU)
             if frame_index % 5 == 0 and len(number_detections) > 0 and len(detections) > 0:
@@ -165,7 +170,10 @@ def run_pipeline(source_video_path: str, target_video_path: str, max_frames: int
                     number_crop = sv.crop_image(frame, crop_box)
                     if number_crop.size > 0:
                         # Save number crop for debug
-                        cv2.imwrite(f"debug_crops/numbers/frame_{frame_index}_n{i}.png", number_crop)
+                        if debug:
+                            num_dir = os.path.join(debug_dir, "crops", "numbers")
+                            os.makedirs(num_dir, exist_ok=True)
+                            cv2.imwrite(os.path.join(num_dir, f"frame_{frame_index}_n{i}.png"), number_crop)
                         
                         # Use infer for SmolVLM based OCR model to ensure preprocessing is handled
                         res = models.number_model.infer(number_crop, prompt=NUMBER_RECOGNITION_MODEL_PROMPT)[0].response
