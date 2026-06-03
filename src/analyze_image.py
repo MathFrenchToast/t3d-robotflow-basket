@@ -20,7 +20,7 @@ try:
         NUMBER_CLASS_ID,
         BALL_CLASS_ID,
         RIM_CLASS_ID,
-        USE_SAM2
+        USE_SAM3
     )
     from src.pipeline import get_masked_crops
 except ImportError:
@@ -36,7 +36,7 @@ except ImportError:
         NUMBER_CLASS_ID,
         BALL_CLASS_ID,
         RIM_CLASS_ID,
-        USE_SAM2
+        USE_SAM3
     )
     from pipeline import get_masked_crops
 
@@ -76,9 +76,9 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
     rim_detections = all_detections[all_detections.class_id == RIM_CLASS_ID]
     number_detections = all_detections[all_detections.class_id == NUMBER_CLASS_ID]
     
-    # 2. SAM2 Masks (if enabled)
-    if USE_SAM2 and len(player_detections) > 0:
-        print("Generating SAM2 masks...")
+    # 2. SAM3 Masks (if enabled)
+    if USE_SAM3 and len(player_detections) > 0:
+        print("Generating SAM3 masks...")
         masks = models.get_masks(frame, player_detections)
         if masks is not None:
             player_detections.mask = masks
@@ -86,7 +86,7 @@ def analyze_image(image_path, output_path=None, debug_dir="out", models=None, an
     # 3. Team Classification
     print("Classifying teams...")
     if len(player_detections) > 0:
-        factor = 1.0 if USE_SAM2 else 0.4
+        factor = 1.0 if USE_SAM3 else 0.4
         scaled_detections = sv.Detections(
             xyxy=sv.scale_boxes(xyxy=player_detections.xyxy, factor=factor),
             mask=player_detections.mask,
