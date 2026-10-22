@@ -13,3 +13,6 @@ out/
 out_test*/
 test_*.json
 output.json
+# Local test outputs and workspace symlinks
+tests
+gemini_direct_out.json
