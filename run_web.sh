@@ -1,9 +1,11 @@
 #!/bin/bash
-# Run the Basketball AI web server
+# Run the T3D Multi-Sport AI Analyzer API & Web UI locally
 
-echo "Starting Basketball AI Analyzer Web Server..."
-echo "Open http://localhost:8001 in your browser"
+PORT="${PORT:-8001}"
+echo "Starting T3D Multi-Sport AI Analyzer API & Web UI..."
+echo "Web UI:   http://localhost:${PORT}"
+echo "API Docs: http://localhost:${PORT}/docs"
+echo "Healthz:  http://localhost:${PORT}/healthz"
 echo ""
 
-# Using port 8001 to avoid conflict if vlm-test is also running on 8000
-uv run python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8001 --reload
+PYTHONPATH=. uv run python -m uvicorn src.web.app:app --host 0.0.0.0 --port "${PORT}" --reload

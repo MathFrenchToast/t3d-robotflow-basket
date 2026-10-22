@@ -3,123 +3,507 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basketball AI Analyzer</title>
+    <title>T3D Multi-Sport Image Analyzer</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #fff; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; background: #2d2d2d; border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #f97316; font-size: 36px; }
-        .upload-section { background: #3d3d3d; padding: 30px; border-radius: 8px; border: 2px dashed #555; text-align: center; margin-bottom: 30px; transition: 0.3s; }
-        .upload-section:hover { border-color: #f97316; }
-        input[type="file"] { display: none; }
-        .btn { padding: 12px 24px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
-        .btn-primary { background: #f97316; color: #fff; }
-        .btn-primary:hover { background: #ea580c; }
-        .btn-primary:disabled { background: #555; cursor: not-allowed; }
-        .results { display: none; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
-        .result-image { background: #000; border-radius: 8px; overflow: hidden; }
-        .result-image img { width: 100%; display: block; }
-        .result-json { background: #111; padding: 15px; border-radius: 8px; overflow: auto; max-height: 600px; }
-        pre { font-family: monospace; font-size: 13px; color: #10b981; }
-        .spinner { display: none; width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s linear infinite; margin-right: 10px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #drop-zone { cursor: pointer; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            max-width: 1440px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: white;
+            padding: 28px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 26px;
+            font-weight: 700;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
+
+        .api-badge {
+            background: rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .content {
+            padding: 28px 32px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        select:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-row label {
+            font-size: 14px;
+            color: #e2e8f0;
+            cursor: pointer;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-analyze {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-analyze:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
+        }
+
+        .btn-analyze:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-reset {
+            background: #334155;
+            color: #e2e8f0;
+        }
+
+        .btn-reset:hover {
+            background: #475569;
+        }
+
+        .spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .btn-analyze:disabled .spinner {
+            display: inline-block;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 18px;
+            border-left: 4px solid #ef4444;
+            font-size: 14px;
+        }
+
+        .results {
+            display: none;
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #334155;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .metrics-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .metric-pill {
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        .metric-pill strong {
+            color: #38bdf8;
+            margin-left: 4px;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        @media (max-width: 1024px) {
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .result-image-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .card-toolbar {
+            padding: 10px 14px;
+            background: #162032;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .result-image-card img {
+            width: 100%;
+            height: auto;
+            display: block;
+            cursor: zoom-in;
+        }
+
+        .result-json-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .result-json {
+            padding: 16px;
+            overflow: auto;
+            max-height: 640px;
+        }
+
+        .result-json pre {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            color: #34d399;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏀 Basketball AI Analyzer</h1>
-            <p>Upload an image for instant detection and analysis</p>
-        </div>
-
-        <div class="upload-section" id="drop-zone">
-            <p>Drag & Drop an image here or click to select</p>
-            <input type="file" id="fileInput" accept="image/*">
-            <div id="file-info" style="margin: 15px 0; color: #f97316; font-weight: bold;"></div>
-            <button class="btn btn-primary" id="analyzeBtn" disabled>
-                <span class="spinner" id="spinner"></span>Analyze Image
-            </button>
-        </div>
-
-        <div class="results" id="results">
-            <div class="result-image">
-                <img id="vizImg" src="" alt="Analysis Result">
+            <div>
+                <h1>🏟️ T3D Multi-Sport AI Analyzer</h1>
+                <p>Players, Goalkeepers (T0-GK / T1-GK), Referees, Ball & 2D Homography Radar</p>
             </div>
-            <div class="result-json">
-                <pre id="jsonOut"></pre>
+            <div class="api-badge">
+                POST /api/analyze (output_format=json|image) • POST /api/visualize
+            </div>
+        </div>
+
+        <div class="content">
+            <form id="analyzeForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="sport">Sport Type</label>
+                        <select id="sport" required>
+                            <option value="auto">Auto-detect (from filename)</option>
+                            <option value="basket" selected>Basketball</option>
+                            <option value="foot">Football / Soccer</option>
+                            <option value="handball">Handball</option>
+                            <option value="usfootball">US Football (NFL)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="model">VLM Model & Backend</label>
+                        <select id="model">
+                            <option value="openrouter|openai/gpt-6-sol" selected>OpenRouter — openai/gpt-6-sol (Default)</option>
+                            <option value="openrouter|google/gemini-2.5-pro">OpenRouter — google/gemini-2.5-pro</option>
+                            <option value="openrouter|google/gemini-2.5-flash">OpenRouter — google/gemini-2.5-flash</option>
+                            <option value="gemini-direct|gemini-3.6-flash">Gemini Direct — gemini-3.6-flash</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="viewMode">Visualization Mode</label>
+                        <select id="viewMode">
+                            <option value="side_by_side" selected>Side-by-Side (Annotated + 2D Radar)</option>
+                            <option value="annotated">Overlay Only (Top-Left Radar)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="image">Image File</label>
+                        <input type="file" id="image" accept="image/*" required>
+                    </div>
+                </div>
+
+                <div class="checkbox-row">
+                    <input type="checkbox" id="vlmPriors" checked>
+                    <label for="vlmPriors">Enable VLM Probabilistic Priors & Court Calibration Landmarks (RANSAC 2D Homography)</label>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn-analyze" id="analyzeBtn">
+                        <span class="spinner"></span>Analyze Image
+                    </button>
+                    <button type="reset" class="btn-reset" id="resetBtn">Clear</button>
+                </div>
+            </form>
+
+            <div id="errorContainer"></div>
+
+            <div class="results" id="results">
+                <div class="metrics-bar" id="metricsBar"></div>
+
+                <div class="results-grid" id="resultsGrid">
+                    <div class="result-image-card">
+                        <div class="card-toolbar">
+                            <span id="vizLabel">Visualization (Side-by-Side + 2D Radar)</span>
+                            <span>Click image to open full resolution</span>
+                        </div>
+                        <img id="bboxImage" alt="Analysis visualization" title="Click to open full size in new tab">
+                    </div>
+                    <div class="result-json-card">
+                        <div class="card-toolbar">
+                            <span>Structured JSON Output</span>
+                            <span id="jsonStatus"></span>
+                        </div>
+                        <div class="result-json">
+                            <pre id="bboxJson"></pre>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('file-info');
-        const analyzeBtn = document.getElementById('analyzeBtn');
+        const form = document.getElementById('analyzeForm');
+        const errorContainer = document.getElementById('errorContainer');
         const results = document.getElementById('results');
-        const vizImg = document.getElementById('vizImg');
-        const jsonOut = document.getElementById('jsonOut');
-        const spinner = document.getElementById('spinner');
+        const metricsBar = document.getElementById('metricsBar');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const bboxImage = document.getElementById('bboxImage');
+        const bboxJson = document.getElementById('bboxJson');
+        const viewModeSelect = document.getElementById('viewMode');
+        const vizLabel = document.getElementById('vizLabel');
 
-        dropZone.onclick = () => fileInput.click();
+        let lastAnalysisResult = null;
+        let lastImageFile = null;
 
-        fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                fileInfo.textContent = `Selected: ${file.name}`;
-                analyzeBtn.disabled = false;
+        bboxImage.addEventListener('click', () => {
+            if (bboxImage.src) {
+                window.open(bboxImage.src, '_blank');
             }
-        };
+        });
 
-        analyzeBtn.onclick = async (e) => {
-            e.stopPropagation();
-            const file = fileInput.files[0];
-            if (!file) return;
+        viewModeSelect.addEventListener('change', async () => {
+            if (lastAnalysisResult && lastImageFile) {
+                await renderVisualization(lastImageFile, lastAnalysisResult, viewModeSelect.value);
+            }
+        });
+
+        async function renderVisualization(imageFile, analysisResult, viewMode) {
+            const vizFormData = new FormData();
+            vizFormData.append('image', imageFile);
+            vizFormData.append('analysis_json', JSON.stringify(analysisResult));
+            vizFormData.append('sport', analysisResult.sport || 'basket');
+            vizFormData.append('view_mode', viewMode);
+
+            const vizResponse = await fetch('/api/visualize', {
+                method: 'POST',
+                body: vizFormData
+            });
+
+            if (!vizResponse.ok) {
+                const err = await vizResponse.json();
+                throw new Error(err.error || 'Visualization failed');
+            }
+
+            const blob = await vizResponse.blob();
+            bboxImage.src = URL.createObjectURL(blob);
+            vizLabel.textContent = viewMode === 'side_by_side'
+                ? 'Visualization (Side-by-Side + 2D Radar)'
+                : 'Visualization (Annotated Overlay)';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorContainer.innerHTML = '';
+
+            const sport = document.getElementById('sport').value;
+            const [backend, model] = document.getElementById('model').value.split('|');
+            const viewMode = viewModeSelect.value;
+            const vlmPriors = document.getElementById('vlmPriors').checked;
+            const imageInput = document.getElementById('image');
+            const imageFile = imageInput.files[0];
+
+            if (!imageFile) {
+                showError('Please select an image file.');
+                return;
+            }
 
             analyzeBtn.disabled = true;
-            spinner.style.display = 'inline-block';
-            results.style.display = 'none';
-
-            const formData = new FormData();
-            formData.append('image', file);
 
             try {
-                const response = await fetch('/api/analyze', {
+                // Step 1: Analyze image -> JSON
+                const formData = new FormData();
+                formData.append('image', imageFile);
+                formData.append('sport', sport);
+                formData.append('backend', backend);
+                formData.append('model', model);
+                formData.append('vlm_priors', vlmPriors ? 'true' : 'false');
+                formData.append('output_format', 'json');
+
+                const analyzeResponse = await fetch('/api/analyze', {
                     method: 'POST',
                     body: formData
                 });
-                const data = await response.json();
-                
-                if (data.success) {
-                    jsonOut.textContent = JSON.stringify(data, null, 2);
-                    vizImg.src = `/api/viz/${data.viz_id}`;
-                    results.style.display = 'grid';
-                } else {
-                    alert('Error: ' + data.error);
+
+                if (!analyzeResponse.ok) {
+                    const error = await analyzeResponse.json();
+                    throw new Error(error.error || 'Analysis failed');
                 }
-            } catch (err) {
-                alert('Analysis failed: ' + err.message);
+
+                const analyzeResult = await analyzeResponse.json();
+                lastAnalysisResult = analyzeResult;
+                lastImageFile = imageFile;
+
+                // Step 2: Render visualization from JSON (0 LLM cost)
+                await renderVisualization(imageFile, analyzeResult, viewMode);
+
+                // Populate metrics bar
+                const dets = analyzeResult.detections || {};
+                const playersCount = (dets.players || []).length;
+                const gkCount = (dets.goalkeepers || []).length;
+                const refCount = (dets.referees || []).length;
+                const ballCount = (dets.ball || []).length;
+                const perf = analyzeResult.performance || {};
+                const usage = analyzeResult.token_usage || {};
+                const homo = analyzeResult.homography || {};
+
+                metricsBar.innerHTML = `
+                    <div class="metric-pill">Sport: <strong>${(analyzeResult.sport || sport).toUpperCase()}</strong></div>
+                    <div class="metric-pill">Players: <strong>${playersCount}</strong></div>
+                    <div class="metric-pill">Goalkeepers: <strong>${gkCount}</strong></div>
+                    <div class="metric-pill">Referees: <strong>${refCount}</strong></div>
+                    <div class="metric-pill">Ball: <strong>${ballCount}</strong></div>
+                    <div class="metric-pill">Homography: <strong>${homo.source || 'none'} (${homo.inliers_count || 0} pts)</strong></div>
+                    <div class="metric-pill">Latency: <strong>${perf.warm_pipeline_seconds || '?'}s</strong></div>
+                    <div class="metric-pill">Cost: <strong>$${usage.estimated_cost_usd !== undefined ? usage.estimated_cost_usd : '0.00'}</strong></div>
+                `;
+
+                bboxJson.textContent = JSON.stringify(analyzeResult, null, 2);
+                results.classList.add('show');
+            } catch (error) {
+                showError(error.message || 'An error occurred during analysis');
             } finally {
                 analyzeBtn.disabled = false;
-                spinner.style.display = 'none';
             }
-        };
+        });
 
-        // Drag and drop handlers
-        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.style.borderColor = '#f97316'; };
-        dropZone.ondragleave = () => { dropZone.style.borderColor = '#555'; };
-        dropZone.ondrop = (e) => {
-            e.preventDefault();
-            dropZone.style.borderColor = '#555';
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                fileInput.files = e.dataTransfer.files;
-                fileInfo.textContent = `Selected: ${file.name}`;
-                analyzeBtn.disabled = false;
-            }
-        };
+        function showError(message) {
+            errorContainer.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            results.classList.remove('show');
+            errorContainer.innerHTML = '';
+            lastAnalysisResult = null;
+            lastImageFile = null;
+        });
     </script>
 </body>
 </html>

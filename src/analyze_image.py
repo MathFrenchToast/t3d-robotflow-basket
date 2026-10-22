@@ -10,7 +10,6 @@ from pathlib import Path
 
 # Add src to path if needed, but we expect to run as 'python -m src.analyze_image'
 try:
-    from src.models import BasketballModels
     from src.config import (
         PLAYER_DETECTION_MODEL_CONFIDENCE,
         PLAYER_DETECTION_MODEL_IOU_THRESHOLD,
@@ -23,13 +22,11 @@ try:
         RIM_CLASS_ID,
         USE_SAM
     )
-    from src.pipeline import get_masked_crops
     from src.workflow_adapter import WorkflowAdapter, read_image_robust
     from src.court_homography import CourtHomographyCalculator
     from src.sports_config import resolve_sport, SportConfig
 except ImportError:
     # Fallback for direct script execution if not as module
-    from models import BasketballModels
     from config import (
         PLAYER_DETECTION_MODEL_CONFIDENCE,
         PLAYER_DETECTION_MODEL_IOU_THRESHOLD,
@@ -42,12 +39,18 @@ except ImportError:
         RIM_CLASS_ID,
         USE_SAM
     )
-    from pipeline import get_masked_crops
     from workflow_adapter import WorkflowAdapter, read_image_robust
     from court_homography import CourtHomographyCalculator
     from sports_config import resolve_sport, SportConfig
 
 def analyze_image(image_path, output_path=None, debug_dir="out", models=None, annotator=None, debug=False):
+    try:
+        from src.models import BasketballModels
+        from src.pipeline import get_masked_crops
+    except ImportError:
+        from models import BasketballModels
+        from pipeline import get_masked_crops
+
     if not os.path.exists(image_path):
         print(f"Error: Image {image_path} not found.")
         return None, None
@@ -1000,6 +1003,176 @@ def analyze_image_workflow(
             print(f"Notice: side_by_side generation: {e}")
 
     return output, annotated_frame
+
+
+def render_workflow_visualizations(
+    frame: np.ndarray,
+    output: Dict[str, Any],
+    annotator=None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Render both the annotated frame (with top-left 2D radar overlay) and the
+    side-by-side frame ([annotated frame | full-height 2D radar]) in memory
+    directly from an image `frame` and the structured `output` dictionary
+    produced by `analyze_image_workflow`.
+    """
+    from src.visualization import SportsAnnotator
+
+    sport_name = resolve_sport(output.get("sport", "basket")).name
+    if annotator is None or getattr(annotator, "sport", None) != sport_name:
+        annotator = SportsAnnotator(sport=sport_name)
+
+    dets_dict = output.get("detections", {})
+    players_list = dets_dict.get("players", [])
+    gks_list = dets_dict.get("goalkeepers", [])
+    refs_list = dets_dict.get("referees", [])
+    balls_list = dets_dict.get("ball", [])
+    goals_list = dets_dict.get("goal_or_basket", [])
+    landmarks = output.get("landmarks", [])
+
+    team_palette = sv.ColorPalette([sv.Color.from_hex("#00BFFF"), sv.Color.from_hex("#FF1493")])
+    team_box_annotator = sv.BoxAnnotator(color=team_palette, thickness=3)
+    team_label_annotator = sv.LabelAnnotator(color=team_palette, text_color=sv.Color.WHITE)
+
+    def _annotate_base(canvas: np.ndarray) -> np.ndarray:
+        out_canvas = canvas.copy()
+        # 1. Players
+        if players_list:
+            p_xyxy = np.array([p["bbox"] for p in players_list], dtype=np.float32)
+            p_conf = np.array([p.get("confidence", 0.9) for p in players_list], dtype=np.float32)
+            p_teams = [p.get("team", 0) if p.get("team") in (0, 1) else 0 for p in players_list]
+            p_dets = sv.Detections(
+                xyxy=p_xyxy,
+                confidence=p_conf,
+                class_id=np.array(p_teams, dtype=int),
+            )
+            p_labels = [
+                f"T{p_teams[i]}" if p.get("is_on_court", True) else f"T{p_teams[i]} (Bench)"
+                for i, p in enumerate(players_list)
+            ]
+            out_canvas = team_box_annotator.annotate(out_canvas, p_dets)
+            out_canvas = team_label_annotator.annotate(out_canvas, p_dets, p_labels)
+
+        # 2. Goalkeepers (T0-GK / T1-GK)
+        if gks_list:
+            gk_xyxy = np.array([g["bbox"] for g in gks_list], dtype=np.float32)
+            gk_conf = np.array([g.get("confidence", 0.9) for g in gks_list], dtype=np.float32)
+            gk_dets = sv.Detections(
+                xyxy=gk_xyxy,
+                confidence=gk_conf,
+                class_id=np.zeros(len(gks_list), dtype=int),
+            )
+            gk_palette = sv.ColorPalette([sv.Color.from_hex("#39FF14")])
+            gk_box_annotator = sv.BoxAnnotator(color=gk_palette, thickness=3)
+            gk_label_annotator = sv.LabelAnnotator(color=gk_palette, text_color=sv.Color.BLACK)
+            gk_labels = [g.get("label", f"T{g.get('team', 0)}-GK") for g in gks_list]
+            out_canvas = gk_box_annotator.annotate(out_canvas, gk_dets)
+            out_canvas = gk_label_annotator.annotate(out_canvas, gk_dets, gk_labels)
+
+        # 3. Referees
+        if refs_list:
+            r_xyxy = np.array([r["bbox"] for r in refs_list], dtype=np.float32)
+            r_conf = np.array([r.get("confidence", 0.9) for r in refs_list], dtype=np.float32)
+            r_dets = sv.Detections(
+                xyxy=r_xyxy,
+                confidence=r_conf,
+                class_id=np.zeros(len(refs_list), dtype=int),
+            )
+            out_canvas = annotator.box_annotator.annotate(out_canvas, r_dets)
+            out_canvas = annotator.label_annotator.annotate(out_canvas, r_dets, ["REF"] * len(refs_list))
+
+        # 4. Ball
+        if balls_list:
+            b_xyxy = np.array([b["bbox"] for b in balls_list], dtype=np.float32)
+            b_conf = np.array([b.get("confidence", 0.9) for b in balls_list], dtype=np.float32)
+            b_dets = sv.Detections(
+                xyxy=b_xyxy,
+                confidence=b_conf,
+                class_id=np.zeros(len(balls_list), dtype=int),
+            )
+            ball_palette = sv.ColorPalette([sv.Color.from_hex("#FF4500")])
+            ball_box_annotator = sv.BoxAnnotator(color=ball_palette, thickness=3)
+            ball_label_annotator = sv.LabelAnnotator(color=ball_palette, text_color=sv.Color.WHITE)
+            out_canvas = ball_box_annotator.annotate(out_canvas, b_dets)
+            out_canvas = ball_label_annotator.annotate(out_canvas, b_dets, ["BALL"] * len(balls_list))
+
+        # 5. Goal / Basket / Goalpost
+        if goals_list:
+            g_xyxy = np.array([g["bbox"] for g in goals_list], dtype=np.float32)
+            g_conf = np.array([g.get("confidence", 0.9) for g in goals_list], dtype=np.float32)
+            g_dets = sv.Detections(
+                xyxy=g_xyxy,
+                confidence=g_conf,
+                class_id=np.zeros(len(goals_list), dtype=int),
+            )
+            goal_label = "BASKET" if sport_name == "basket" else ("GOALPOST" if sport_name == "usfootball" else "GOAL")
+            goal_palette = sv.ColorPalette([sv.Color.from_hex("#00FF7F")])
+            goal_box_annotator = sv.BoxAnnotator(color=goal_palette, thickness=3)
+            goal_label_annotator = sv.LabelAnnotator(color=goal_palette, text_color=sv.Color.BLACK)
+            out_canvas = goal_box_annotator.annotate(out_canvas, g_dets)
+            out_canvas = goal_label_annotator.annotate(out_canvas, g_dets, [goal_label] * len(goals_list))
+
+        # 6. Landmarks
+        for lm in landmarks:
+            lx, ly = int(round(lm.get("x", 0))), int(round(lm.get("y", 0)))
+            lbl = str(lm.get("label", "")).replace("right_", "R_").replace("left_", "L_")
+            src = lm.get("source", "")
+            color_bgr = (0, 255, 255) if src == "vlm_prior" else ((0, 255, 128) if src == "goal_bbox_anchor" else (0, 165, 255))
+            cv2.circle(out_canvas, (lx, ly), 7, (0, 0, 0), -1)
+            cv2.circle(out_canvas, (lx, ly), 5, color_bgr, -1)
+            cv2.putText(out_canvas, lbl, (lx + 8, ly - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(out_canvas, lbl, (lx + 8, ly - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color_bgr, 1, cv2.LINE_AA)
+
+        return out_canvas
+
+    left_annotated = _annotate_base(frame)
+    annotated_frame = left_annotated.copy()
+
+    # Build 2D court/pitch radar
+    active_pts_list = []
+    active_colors = []
+    for p in players_list:
+        pos = p.get("court_position_cm")
+        if p.get("is_on_court", True) and isinstance(pos, (list, tuple)) and len(pos) == 2:
+            active_pts_list.append(pos)
+            t = p.get("team", 0)
+            active_colors.append(sv.Color.from_hex("#00BFFF") if t == 0 else sv.Color.from_hex("#FF1493"))
+
+    active_gk_pts_list = []
+    active_gk_teams = []
+    for g in gks_list:
+        pos = g.get("court_position_cm")
+        if g.get("is_on_court", True) and isinstance(pos, (list, tuple)) and len(pos) == 2:
+            active_gk_pts_list.append(pos)
+            active_gk_teams.append(int(g.get("team", 0)))
+
+    court_overlay = None
+    if active_pts_list or active_gk_pts_list:
+        active_pts_arr = np.array(active_pts_list, dtype=np.float32) if active_pts_list else np.empty((0, 2), dtype=np.float32)
+        active_gk_arr = np.array(active_gk_pts_list, dtype=np.float32) if active_gk_pts_list else None
+        court_overlay = annotator.draw_court_overlay(
+            active_pts_arr,
+            colors=active_colors,
+            gk_xy=active_gk_arr,
+            gk_teams=active_gk_teams if active_gk_teams else None,
+        )
+        annotated_frame = annotator.overlay_court(annotated_frame, court_overlay)
+
+    if court_overlay is not None:
+        fh, fw = frame.shape[:2]
+        ch, cw = court_overlay.shape[:2]
+        scale = fh / float(ch)
+        court_resized = cv2.resize(court_overlay, (int(cw * scale), fh))
+        side_by_side = np.hstack([left_annotated, court_resized])
+    else:
+        side_by_side = np.hstack([frame, annotated_frame])
+
+    sh, sw = side_by_side.shape[:2]
+    if sw > 2560:
+        scale_w = 2560.0 / sw
+        side_by_side = cv2.resize(side_by_side, (2560, int(sh * scale_w)))
+
+    return annotated_frame, side_by_side
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze sports images (basket, foot, handball, usfootball) and output JSON")
