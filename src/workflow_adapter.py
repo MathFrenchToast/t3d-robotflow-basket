@@ -536,17 +536,7 @@ class WorkflowAdapter:
             classes = sport_cfg.classes
 
         frame = read_image_robust(image_input)
-        max_dim = 1920 if mode == "high" else 1280
         fh, fw = frame.shape[:2]
-        if max(fh, fw) > max_dim:
-            scale = max_dim / max(fh, fw)
-            frame_to_send = cv2.resize(frame, (int(fw * scale), int(fh * scale)))
-        else:
-            frame_to_send = frame
-
-        jpeg_quality = 92 if mode == "high" else 85
-        _, buffer = cv2.imencode('.jpg', frame_to_send, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
-        b64_data = base64.b64encode(buffer).decode("utf-8")
 
         # Normalize model_name if passed without provider prefix or with 6.1 alias
         or_model = model_name.strip()
@@ -567,17 +557,71 @@ class WorkflowAdapter:
             elif low.startswith("grok"):
                 or_model = f"x-ai/{or_model}"
 
+        is_openai = or_model.startswith("openai/")
+        # OpenAI vision models natively tile 16:9 images onto a 1536x864 canvas (48x27 patches of 32px)
+        if is_openai:
+            max_dim = 1536 if mode == "high" else 1280
+        else:
+            max_dim = 1920 if mode == "high" else 1280
+
+        if max(fh, fw) > max_dim:
+            scale = max_dim / max(fh, fw)
+            frame_to_send = cv2.resize(frame, (int(round(fw * scale)), int(round(fh * scale))))
+        else:
+            frame_to_send = frame
+
+        send_h, send_w = frame_to_send.shape[:2]
+        jpeg_quality = 92 if mode == "high" else 85
+        _, buffer = cv2.imencode('.jpg', frame_to_send, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
+        b64_data = base64.b64encode(buffer).decode("utf-8")
+
+        # When --vlm-priors is active, court keypoints handle field geometry so we omit redundant field_marks boxes
+        base_prompt_desc = sport_cfg.prompt_description
         if enable_vlm_priors:
+            filtered_lines = [
+                line for line in base_prompt_desc.splitlines()
+                if "'field_marks'" not in line
+            ]
+            base_prompt_desc = "\n".join(filtered_lines)
+
+        if enable_vlm_priors:
+            if is_openai:
+                coord_instructions = (
+                    f"CRITICAL Coordinates System (Image size is {send_w}x{send_h} pixels):\n"
+                    f"- All bounding boxes 'box_2d' MUST use integer pixel coordinates [xmin, ymin, xmax, ymax] "
+                    f"within the {send_w}x{send_h} image grid (where [0, 0] is top-left and [{send_w}, {send_h}] is bottom-right).\n"
+                    f"- All court keypoints 'point_2d' MUST use integer pixel coordinates [x, y] "
+                    f"within the {send_w}x{send_h} image grid (where x is horizontal 0..{send_w} and y is vertical 0..{send_h}).\n\n"
+                )
+                box_example = "[xmin, ymin, xmax, ymax]"
+                pt_example = "[x, y]"
+            else:
+                coord_instructions = (
+                    "CRITICAL Coordinates System:\n"
+                    "- All bounding boxes 'box_2d' MUST use normalized integer coordinates [ymin, xmin, ymax, xmax] scaled from 0 to 1000 "
+                    "(where [0, 0] is top-left and [1000, 1000] is bottom-right of the image).\n"
+                    "- All court keypoints 'point_2d' MUST use normalized integer coordinates [y, x] scaled from 0 to 1000 "
+                    "(where y is vertical top-to-bottom 0..1000 and x is horizontal left-to-right 0..1000).\n\n"
+                )
+                box_example = "[ymin, xmin, ymax, xmax]"
+                pt_example = "[y, x]"
+
+            gk_instruction = ""
+            gk_example = ""
+            if sport_cfg.has_goalkeeper:
+                gk_instruction = (
+                    "   - For goalkeepers, use label 'goalkeepers' and set 'team_id' (0 or 1) to match the team defending that goal "
+                    "(determined by court side / defending teammates, since goalkeepers wear a distinct jersey color).\n"
+                )
+                gk_example = f'    {{"box_2d": {box_example}, "label": "goalkeepers", "team_id": 0, "role_status": "active_on_court", "jersey_number": "1", "action_posture": "defensive_stance"}},\n'
+
             prompt = (
-                f"{sport_cfg.prompt_description}\n\n"
-                "CRITICAL Coordinates System:\n"
-                "- All bounding boxes 'box_2d' MUST use normalized integer coordinates [ymin, xmin, ymax, xmax] scaled from 0 to 1000 "
-                "(where [0, 0] is top-left and [1000, 1000] is bottom-right of the image).\n"
-                "- All court keypoints 'point_2d' MUST use normalized integer coordinates [y, x] scaled from 0 to 1000 "
-                "(where y is vertical top-to-bottom 0..1000 and x is horizontal left-to-right 0..1000).\n\n"
+                f"{base_prompt_desc}\n\n"
+                f"{coord_instructions}"
                 "HYBRID VLM PROBABILISTIC PRIORS (Semantic & Biomechanical Enrichment):\n"
-                "1. Detect EVERY visible player on the court (both teams, including corners and foreground edges) with label 'players' and provide:\n"
+                "1. Exhaustively detect EVERY visible player on the field/court (both teams, including closely packed players on the line of scrimmage/clusters, corners, and edges) with label 'players', plus all visible 'goalkeepers' (if applicable) and 'referees', and provide for each player/goalkeeper:\n"
                 "   - 'team_id': integer 0 (light/white/home kit) or 1 (dark/colored/away kit).\n"
+                f"{gk_instruction}"
                 "   - 'role_status': 'active_on_court', 'active_inbound', or 'bench_off_court'.\n"
                 "   - 'jersey_number': string with visible digits (e.g. '22') or null.\n"
                 "   - 'action_posture': optional, 'standing_running', 'defensive_stance', or 'jumping_shoot' (if jumping in air).\n"
@@ -585,24 +629,35 @@ class WorkflowAdapter:
                 "Return ONLY a valid JSON object matching this exact structure (no markdown fences):\n"
                 "{\n"
                 '  "objects": [\n'
-                '    {"box_2d": [ymin, xmin, ymax, xmax], "label": "players", "team_id": 0, "role_status": "active_on_court", "jersey_number": "10", "action_posture": "standing_running"}\n'
+                f'    {{"box_2d": {box_example}, "label": "players", "team_id": 0, "role_status": "active_on_court", "jersey_number": "10", "action_posture": "standing_running"}},\n'
+                f"{gk_example}"
+                f'    {{"box_2d": {box_example}, "label": "referees"}}\n'
                 "  ],\n"
                 '  "court_calibration": {\n'
                 '    "visible_court_side": "left|right|center|full",\n'
                 '    "keypoints": [\n'
-                '      {"name": "<canonical_landmark_name>", "point_2d": [y, x]}\n'
+                f'      {{"name": "<canonical_landmark_name>", "point_2d": {pt_example}}}\n'
                 "    ]\n"
                 "  }\n"
                 "}"
             )
         else:
-            prompt = (
-                f"{sport_cfg.prompt_description}\n"
-                "For each detected object, return a JSON object with a key 'objects' containing a JSON array of objects with: "
-                "'box_2d': [ymin, xmin, ymax, xmax] (normalized integers between 0 and 1000), "
-                "'label': the exact class name from the requested list. "
-                "Return only valid JSON."
-            )
+            if is_openai:
+                prompt = (
+                    f"{sport_cfg.prompt_description}\n"
+                    f"For each detected object in this {send_w}x{send_h} image, return a JSON object with a key 'objects' containing a JSON array of objects with: "
+                    f"'box_2d': [xmin, ymin, xmax, ymax] (integer pixel coordinates within 0..{send_w} horizontally and 0..{send_h} vertically), "
+                    "'label': the exact class name from the requested list. "
+                    "Return only valid JSON."
+                )
+            else:
+                prompt = (
+                    f"{sport_cfg.prompt_description}\n"
+                    "For each detected object, return a JSON object with a key 'objects' containing a JSON array of objects with: "
+                    "'box_2d': [ymin, xmin, ymax, xmax] (normalized integers between 0 and 1000), "
+                    "'label': the exact class name from the requested list. "
+                    "Return only valid JSON."
+                )
 
         headers = {
             "Content-Type": "application/json",
@@ -627,7 +682,7 @@ class WorkflowAdapter:
                 }
             ],
             "temperature": 0.1,
-            "max_tokens": 4096,
+            "max_tokens": 16384,
             "response_format": {"type": "json_object"}
         }
 
@@ -675,18 +730,39 @@ class WorkflowAdapter:
             court_calibration = None
             if isinstance(parsed, dict):
                 court_calibration = parsed.get("court_calibration")
-                items = parsed.get("objects", parsed.get("predictions", []))
+                items = parsed.get("objects", parsed.get("detections", parsed.get("predictions", [])))
             elif isinstance(parsed, list):
                 items = parsed
             else:
                 items = []
+
+            if is_openai and isinstance(court_calibration, dict):
+                for kp in court_calibration.get("keypoints") or []:
+                    if "point_2d" in kp and isinstance(kp["point_2d"], (list, tuple)) and len(kp["point_2d"]) == 2:
+                        px_val, py_val = float(kp["point_2d"][0]), float(kp["point_2d"][1])
+                        if max(abs(px_val), abs(py_val)) > 1.0:
+                            kp["x_norm"] = px_val / float(send_w)
+                            kp["y_norm"] = py_val / float(send_h)
+                        else:
+                            kp["x_norm"] = px_val
+                            kp["y_norm"] = py_val
 
             predictions = []
             for item in items:
                 box = item.get("box_2d", item.get("bbox", []))
                 label = item.get("label", item.get("class", "players"))
                 if len(box) == 4:
-                    ymin, xmin, ymax, xmax = [float(v) / 1000.0 if max(box) > 1.0 else float(v) for v in box]
+                    if is_openai:
+                        raw_x1, raw_y1, raw_x2, raw_y2 = [float(v) for v in box]
+                        if max(abs(raw_x1), abs(raw_y1), abs(raw_x2), abs(raw_y2)) <= 1.0:
+                            xmin, ymin, xmax, ymax = raw_x1, raw_y1, raw_x2, raw_y2
+                        else:
+                            xmin = raw_x1 / float(send_w)
+                            ymin = raw_y1 / float(send_h)
+                            xmax = raw_x2 / float(send_w)
+                            ymax = raw_y2 / float(send_h)
+                    else:
+                        ymin, xmin, ymax, xmax = [float(v) / 1000.0 if max(box) > 1.0 else float(v) for v in box]
                     w = xmax - xmin
                     h = ymax - ymin
                     x = xmin + w / 2.0
@@ -844,14 +920,18 @@ class WorkflowAdapter:
             "field_marks": []
         }
         conf_by_cat = {k: [] for k in boxes_by_cat}
-        player_meta = {
-            "vlm_team": [],
-            "vlm_role_status": [],
-            "jersey_number": [],
-            "action_posture": [],
-            "ground_contact_status": [],
-            "ground_point_norm": [],
-            "court_zone_hint": []
+        meta_keys = [
+            "vlm_team",
+            "vlm_role_status",
+            "jersey_number",
+            "action_posture",
+            "ground_contact_status",
+            "ground_point_norm",
+            "court_zone_hint"
+        ]
+        cat_meta = {
+            "players": {k: [] for k in meta_keys},
+            "goalkeepers": {k: [] for k in meta_keys}
         }
 
         img_h, img_w = image_shape if image_shape is not None else (1, 1)
@@ -897,32 +977,35 @@ class WorkflowAdapter:
 
             boxes_by_cat[target_cat].append(box)
             conf_by_cat[target_cat].append(conf)
-            if target_cat == "players":
+            if target_cat in ("players", "goalkeepers"):
+                m_dict = cat_meta[target_cat]
                 vt = pred.get("vlm_team")
-                player_meta["vlm_team"].append(int(vt) if vt in (0, 1, "0", "1") else -1)
-                player_meta["vlm_role_status"].append(str(pred.get("vlm_role_status") or "active_on_court"))
-                player_meta["jersey_number"].append(str(pred.get("jersey_number") or ""))
-                player_meta["action_posture"].append(str(pred.get("action_posture") or "standing_running"))
-                player_meta["ground_contact_status"].append(str(pred.get("ground_contact_status") or "visible_on_floor"))
+                m_dict["vlm_team"].append(int(vt) if vt in (0, 1, "0", "1") else -1)
+                m_dict["vlm_role_status"].append(str(pred.get("vlm_role_status") or "active_on_court"))
+                m_dict["jersey_number"].append(str(pred.get("jersey_number") or ""))
+                m_dict["action_posture"].append(str(pred.get("action_posture") or "standing_running"))
+                m_dict["ground_contact_status"].append(str(pred.get("ground_contact_status") or "visible_on_floor"))
                 gpn = pred.get("ground_point_norm")
                 if isinstance(gpn, (list, tuple, np.ndarray)) and len(gpn) == 2:
-                    player_meta["ground_point_norm"].append((float(gpn[0]), float(gpn[1])))
+                    m_dict["ground_point_norm"].append((float(gpn[0]), float(gpn[1])))
                 else:
-                    player_meta["ground_point_norm"].append(None)
-                player_meta["court_zone_hint"].append(str(pred.get("court_zone_hint") or ""))
+                    m_dict["ground_point_norm"].append(None)
+                m_dict["court_zone_hint"].append(str(pred.get("court_zone_hint") or ""))
 
-        # Filter out degenerate/tiny boxes for players
+        # Filter out degenerate/tiny noise boxes for players while preserving upright profile players in wide shots
         if len(boxes_by_cat["players"]) > 0:
+            min_bw = max(14.0, img_w * 0.010) if image_shape is not None else 14.0
+            min_bh = max(22.0, img_h * 0.020) if image_shape is not None else 22.0
             valid_p_indices = []
             for i, box in enumerate(boxes_by_cat["players"]):
                 bw = box[2] - box[0]
                 bh = box[3] - box[1]
-                if bw >= 50 and bh >= 60:
+                if bw >= min_bw and bh >= min_bh:
                     valid_p_indices.append(i)
             boxes_by_cat["players"] = [boxes_by_cat["players"][i] for i in valid_p_indices]
             conf_by_cat["players"] = [conf_by_cat["players"][i] for i in valid_p_indices]
-            for k in player_meta:
-                player_meta[k] = [player_meta[k][i] for i in valid_p_indices]
+            for k in meta_keys:
+                cat_meta["players"][k] = [cat_meta["players"][k][i] for i in valid_p_indices]
 
         # Convert each category to sv.Detections
         detections_by_cat = {}
@@ -931,18 +1014,19 @@ class WorkflowAdapter:
                 xyxy = np.array(boxes, dtype=np.float32)
                 confidence = np.array(conf_by_cat[cat], dtype=np.float32)
                 data_dict = {}
-                if cat == "players":
+                if cat in ("players", "goalkeepers"):
+                    m_dict = cat_meta[cat]
                     gpn_arr = np.empty(len(xyxy), dtype=object)
-                    for idx_g, g_val in enumerate(player_meta["ground_point_norm"]):
+                    for idx_g, g_val in enumerate(m_dict["ground_point_norm"]):
                         gpn_arr[idx_g] = list(g_val) if g_val is not None else None
                     data_dict = {
-                        "vlm_team": np.array(player_meta["vlm_team"], dtype=int),
-                        "vlm_role_status": np.array(player_meta["vlm_role_status"], dtype=object),
-                        "jersey_number": np.array(player_meta["jersey_number"], dtype=object),
-                        "action_posture": np.array(player_meta["action_posture"], dtype=object),
-                        "ground_contact_status": np.array(player_meta["ground_contact_status"], dtype=object),
+                        "vlm_team": np.array(m_dict["vlm_team"], dtype=int),
+                        "vlm_role_status": np.array(m_dict["vlm_role_status"], dtype=object),
+                        "jersey_number": np.array(m_dict["jersey_number"], dtype=object),
+                        "action_posture": np.array(m_dict["action_posture"], dtype=object),
+                        "ground_contact_status": np.array(m_dict["ground_contact_status"], dtype=object),
                         "ground_point_norm": gpn_arr,
-                        "court_zone_hint": np.array(player_meta["court_zone_hint"], dtype=object)
+                        "court_zone_hint": np.array(m_dict["court_zone_hint"], dtype=object)
                     }
                 detections_by_cat[cat] = sv.Detections(
                     xyxy=xyxy,
@@ -953,9 +1037,9 @@ class WorkflowAdapter:
             else:
                 detections_by_cat[cat] = sv.Detections.empty()
 
-        # Apply NMS on players
+        # Apply NMS on players (0.75 preserves closely packed linemen/scrimmage while removing duplicate boxes)
         if len(detections_by_cat["players"]) > 0:
-            detections_by_cat["players"] = detections_by_cat["players"].with_nms(threshold=0.5)
+            detections_by_cat["players"] = detections_by_cat["players"].with_nms(threshold=0.75)
 
         # Cross-class suppression: if a player overlaps heavily with a referee, referee label wins
         if len(detections_by_cat["referees"]) > 0 and len(detections_by_cat["players"]) > 0:

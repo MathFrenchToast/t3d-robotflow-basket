@@ -206,63 +206,87 @@ class SportsAnnotator:
             key_points=keypoints
         )
 
-    def draw_court_overlay(self, detections_xy: np.ndarray, colors: Optional[List[sv.Color]] = None) -> np.ndarray:
+    def draw_court_overlay(
+        self,
+        detections_xy: np.ndarray,
+        colors: Optional[List[sv.Color]] = None,
+        gk_xy: Optional[np.ndarray] = None,
+        gk_teams: Optional[List[int]] = None
+    ) -> np.ndarray:
         court_image = self.court_image.copy()
-        if detections_xy is None or len(detections_xy) == 0:
-            return court_image
-            
-        pts = np.array(detections_xy, dtype=np.float32)
-        n_pts = len(pts)
-        if colors is None:
-            colors = [sv.Color.BLACK] * n_pts
-
-        if self.sport == "basket":
-            unique_colors = set(colors)
-            for color in unique_colors:
-                mask = [c == color for c in colors]
-                points_subset = pts[mask]
-                court_image = draw_points_on_court(
-                    config=self.court_config,
-                    xy=points_subset,
-                    court=court_image,
-                    scale=1.0,
-                    size=40,
-                    padding=50,
-                    fill_color=color
-                )
+        has_players = detections_xy is not None and len(detections_xy) > 0
+        has_gks = gk_xy is not None and len(gk_xy) > 0
+        if not has_players and not has_gks:
             return court_image
 
-        elif self.sport == "foot":
-            unique_colors = set(colors)
-            for color in unique_colors:
-                mask = [c == color for c in colors]
-                points_subset = pts[mask]
-                court_image = draw_points_on_pitch(
-                    config=self.court_config,
-                    xy=points_subset,
-                    pitch=court_image,
-                    scale=self.scale,
-                    padding=self.padding,
-                    face_color=color,
-                    edge_color=sv.Color.BLACK,
-                    radius=12,
-                    thickness=2
-                )
-            return court_image
+        if has_players:
+            pts = np.array(detections_xy, dtype=np.float32)
+            n_pts = len(pts)
+            if colors is None:
+                colors = [sv.Color.BLACK] * n_pts
 
-        elif self.sport in ["handball", "usfootball"]:
-            # Custom dot plotting on 2D court image
-            for i, pt in enumerate(pts):
-                color = colors[i] if i < len(colors) else sv.Color.BLACK
-                bgr = color.as_bgr() if hasattr(color, "as_bgr") else (0, 0, 0)
-                px = int(self.padding + pt[0] * self.scale)
-                py = int(self.padding + pt[1] * self.scale)
-                # Keep within interior court lines so active players never spill into the outer margin
-                px = max(self.padding + 6, min(court_image.shape[1] - self.padding - 6, px))
-                py = max(self.padding + 6, min(court_image.shape[0] - self.padding - 6, py))
-                cv2.circle(court_image, (px, py), 12, bgr, -1)
+            if self.sport == "basket":
+                unique_colors = set(colors)
+                for color in unique_colors:
+                    mask = [c == color for c in colors]
+                    points_subset = pts[mask]
+                    court_image = draw_points_on_court(
+                        config=self.court_config,
+                        xy=points_subset,
+                        court=court_image,
+                        scale=1.0,
+                        size=40,
+                        padding=50,
+                        fill_color=color
+                    )
+            elif self.sport == "foot":
+                unique_colors = set(colors)
+                for color in unique_colors:
+                    mask = [c == color for c in colors]
+                    points_subset = pts[mask]
+                    court_image = draw_points_on_pitch(
+                        config=self.court_config,
+                        xy=points_subset,
+                        pitch=court_image,
+                        scale=self.scale,
+                        padding=self.padding,
+                        face_color=color,
+                        edge_color=sv.Color.BLACK,
+                        radius=12,
+                        thickness=2
+                    )
+            elif self.sport in ["handball", "usfootball"]:
+                # Custom dot plotting on 2D court image
+                for i, pt in enumerate(pts):
+                    color = colors[i] if i < len(colors) else sv.Color.BLACK
+                    bgr = color.as_bgr() if hasattr(color, "as_bgr") else (0, 0, 0)
+                    px = int(self.padding + pt[0] * self.scale)
+                    py = int(self.padding + pt[1] * self.scale)
+                    # Keep within interior court lines so active players never spill into the outer margin
+                    px = max(self.padding + 6, min(court_image.shape[1] - self.padding - 6, px))
+                    py = max(self.padding + 6, min(court_image.shape[0] - self.padding - 6, py))
+                    cv2.circle(court_image, (px, py), 12, bgr, -1)
+                    cv2.circle(court_image, (px, py), 12, (0, 0, 0), 2)
+
+        if has_gks:
+            gk_pts = np.array(gk_xy, dtype=np.float32)
+            for i, gpt in enumerate(gk_pts):
+                t_id = gk_teams[i] if (gk_teams is not None and i < len(gk_teams) and gk_teams[i] in (0, 1)) else 0
+                team_color = sv.Color.from_hex("#00BFFF") if t_id == 0 else sv.Color.from_hex("#FF1493")
+                team_bgr = team_color.as_bgr()
+                px = int(round(self.padding + gpt[0] * self.scale))
+                py = int(round(self.padding + gpt[1] * self.scale))
+                px = max(self.padding + 8, min(court_image.shape[1] - self.padding - 8, px))
+                py = max(self.padding + 8, min(court_image.shape[0] - self.padding - 8, py))
+                # Distinctive goalkeeper marker: neon-green outer ring + team-colored core + T{t}-GK badge
+                cv2.circle(court_image, (px, py), 16, (20, 255, 57), 3)
+                cv2.circle(court_image, (px, py), 12, team_bgr, -1)
                 cv2.circle(court_image, (px, py), 12, (0, 0, 0), 2)
-            return court_image
+                gk_lbl = f"T{t_id}-GK"
+                tx = px + 18 if gpt[0] < (self.court_dims[0] * 0.5) else px - 64
+                ty = py + 5
+                cv2.putText(court_image, gk_lbl, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 0, 0), 3, cv2.LINE_AA)
+                cv2.putText(court_image, gk_lbl, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
 
         return court_image
 

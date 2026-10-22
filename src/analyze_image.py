@@ -484,6 +484,10 @@ def analyze_image_workflow(
         calc.compute_ground_contact_points(player_detections, (frame_h, frame_w), enable_vlm_priors=enable_vlm_priors)
         if len(player_detections) > 0 else None
     )
+    gk_feet_pts = (
+        calc.compute_ground_contact_points(goalkeeper_detections, (frame_h, frame_w), enable_vlm_priors=enable_vlm_priors)
+        if len(goalkeeper_detections) > 0 else None
+    )
 
     # Hybrid Step 4: VLM Landmark Priors + RANSAC Validation when --vlm-priors is enabled
     vlm_cal = {"visible_court_side": "full", "keypoints": []}
@@ -525,6 +529,27 @@ def analyze_image_workflow(
         else:
             transformed_player_pts = calc.estimate_perspective_projection(feet_pts, (frame_h, frame_w))
             court_mask = np.ones(len(player_detections), dtype=bool)
+
+    # Transform goalkeeper positions onto the 2D pitch/court (preserving goal-area interior)
+    transformed_gk_pts = None
+    if len(goalkeeper_detections) > 0 and gk_feet_pts is not None:
+        if matrix is not None:
+            transformed_gk_pts = calc.transform_points(gk_feet_pts)
+            if transformed_gk_pts is not None:
+                transformed_gk_pts = np.array(transformed_gk_pts, dtype=np.float32)
+                vis_side = str(vlm_cal.get("visible_court_side", "full")).lower()
+                for gi in range(len(transformed_gk_pts)):
+                    gx, gy = float(transformed_gk_pts[gi, 0]), float(transformed_gk_pts[gi, 1])
+                    if vis_side == "left":
+                        gx = float(np.clip(gx, 25.0, calc.court_length * 0.48))
+                    elif vis_side == "right":
+                        gx = float(np.clip(gx, calc.court_length * 0.52, calc.court_length - 25.0))
+                    else:
+                        gx = float(np.clip(gx, 25.0, calc.court_length - 25.0))
+                    gy = float(np.clip(gy, 25.0, calc.court_width - 25.0))
+                    transformed_gk_pts[gi] = [gx, gy]
+        else:
+            transformed_gk_pts = calc.estimate_perspective_projection(gk_feet_pts, (frame_h, frame_w))
     homo_time = time.perf_counter() - t_homo_start
 
     # 4. Classify Teams for Players based on dominant jersey chromaticity + optional Bayesian VLM consensus
@@ -653,10 +678,13 @@ def analyze_image_workflow(
         ground_px = None
         if feet_pts is not None and i < len(feet_pts):
             ground_px = [round(float(coord), 1) for coord in feet_pts[i]]
+        t_val = team_ids[i] if i < len(team_ids) else None
         p_entry = {
             "bbox": player_detections.xyxy[i].tolist(),
             "ground_point_px": ground_px,
-            "team": team_ids[i] if i < len(team_ids) else None,
+            "team": t_val,
+            "label": f"T{t_val}" if t_val is not None else "T0",
+            "role": "player",
             "confidence": float(player_detections.confidence[i]),
             "court_position_cm": court_pos,
             "is_on_court": bool(active_court_mask[i]) if i < len(active_court_mask) else True
@@ -672,11 +700,121 @@ def analyze_image_workflow(
             p_entry["court_zone_hint"] = str(court_zone_hints[i]) if i < len(court_zone_hints) and court_zone_hints[i] else None
         output["detections"]["players"].append(p_entry)
 
+    # Determine goalkeeper team IDs (T0-GK vs T1-GK) from defensive goal-area geometry + VLM prior alignment
+    gk_team_ids: List[int] = []
+    gk_vlm_teams = (
+        list(goalkeeper_detections.data.get("vlm_team", []))
+        if (goalkeeper_detections.data and "vlm_team" in goalkeeper_detections.data)
+        else [-1] * len(goalkeeper_detections)
+    )
+    gk_jersey_numbers = (
+        list(goalkeeper_detections.data.get("jersey_number", []))
+        if (goalkeeper_detections.data and "jersey_number" in goalkeeper_detections.data)
+        else [""] * len(goalkeeper_detections)
+    )
+    gk_action_postures = (
+        list(goalkeeper_detections.data.get("action_posture", []))
+        if (goalkeeper_detections.data and "action_posture" in goalkeeper_detections.data)
+        else ["defensive_stance"] * len(goalkeeper_detections)
+    )
+    gk_ground_statuses = (
+        list(goalkeeper_detections.data.get("ground_contact_status", []))
+        if (goalkeeper_detections.data and "ground_contact_status" in goalkeeper_detections.data)
+        else ["visible_on_floor"] * len(goalkeeper_detections)
+    )
+
+    # Check if VLM team IDs are inverted relative to final chromatic team_ids
+    same_polarity_votes = 0
+    inv_polarity_votes = 0
+    for idx_p, vt_p in enumerate(vlm_teams_raw):
+        if vt_p in (0, 1) and idx_p < len(team_ids) and team_ids[idx_p] in (0, 1):
+            if int(vt_p) == int(team_ids[idx_p]):
+                same_polarity_votes += 1
+            else:
+                inv_polarity_votes += 1
+    invert_vlm_polarity = inv_polarity_votes > same_polarity_votes
+
     for i in range(len(goalkeeper_detections)):
-        output["detections"]["goalkeepers"].append({
+        assigned_t = None
+        if transformed_gk_pts is not None and i < len(transformed_gk_pts) and transformed_player_pts is not None and len(transformed_player_pts) > 0:
+            gx, gy = float(transformed_gk_pts[i][0]), float(transformed_gk_pts[i][1])
+            goal_pt = np.array([0.0, calc.court_width * 0.5] if gx < (calc.court_length * 0.5) else [calc.court_length, calc.court_width * 0.5])
+            team_dists = {}
+            for cand_t in (0, 1):
+                cand_pts = [
+                    transformed_player_pts[p_idx]
+                    for p_idx in range(len(player_detections))
+                    if p_idx < len(team_ids) and team_ids[p_idx] == cand_t and active_court_mask[p_idx]
+                ]
+                if cand_pts:
+                    dists = sorted(float(np.linalg.norm(pt - goal_pt)) for pt in cand_pts)
+                    top_k = dists[:min(3, len(dists))]
+                    team_dists[cand_t] = float(np.mean(top_k))
+            if 0 in team_dists and 1 in team_dists:
+                assigned_t = 0 if team_dists[0] <= team_dists[1] else 1
+            elif 0 in team_dists:
+                assigned_t = 0
+            elif 1 in team_dists:
+                assigned_t = 1
+
+        if assigned_t is None and i < len(gk_vlm_teams) and gk_vlm_teams[i] in (0, 1):
+            raw_gt = int(gk_vlm_teams[i])
+            assigned_t = (1 - raw_gt) if invert_vlm_polarity else raw_gt
+
+        if assigned_t is None:
+            assigned_t = 0 if (gk_feet_pts is not None and gk_feet_pts[i][0] < frame_w * 0.5) else 1
+        gk_team_ids.append(int(assigned_t))
+
+    # Enforce physical rule: at most 1 active goalkeeper per half-court / goal
+    gk_active_mask = np.ones(len(goalkeeper_detections), dtype=bool)
+    if len(goalkeeper_detections) > 1 and transformed_gk_pts is not None and len(transformed_gk_pts) == len(goalkeeper_detections):
+        for half_is_left in (True, False):
+            half_indices = [
+                gi for gi in range(len(goalkeeper_detections))
+                if (transformed_gk_pts[gi][0] < calc.court_length * 0.5) == half_is_left
+            ]
+            if len(half_indices) > 1:
+                goal_center = np.array([0.0 if half_is_left else calc.court_length, calc.court_width * 0.5])
+                half_indices_sorted = sorted(
+                    half_indices,
+                    key=lambda gi: float(np.linalg.norm(transformed_gk_pts[gi] - goal_center))
+                )
+                for extra_gi in half_indices_sorted[1:]:
+                    gk_active_mask[extra_gi] = False
+
+    # If 2 active goalkeepers are on opposite sides of the pitch/court, ensure they have opposite team IDs
+    active_gk_indices = [gi for gi in range(len(goalkeeper_detections)) if gk_active_mask[gi]]
+    if len(active_gk_indices) == 2 and transformed_gk_pts is not None:
+        i0, i1 = active_gk_indices[0], active_gk_indices[1]
+        if (transformed_gk_pts[i0][0] < calc.court_length * 0.5) != (transformed_gk_pts[i1][0] < calc.court_length * 0.5):
+            if gk_team_ids[i0] == gk_team_ids[i1]:
+                gk_team_ids[i1] = 1 - gk_team_ids[i0]
+
+    for i in range(len(goalkeeper_detections)):
+        gk_court_pos = None
+        if transformed_gk_pts is not None and i < len(transformed_gk_pts):
+            gk_court_pos = [round(float(coord), 1) for coord in transformed_gk_pts[i]]
+        gk_ground_px = None
+        if gk_feet_pts is not None and i < len(gk_feet_pts):
+            gk_ground_px = [round(float(coord), 1) for coord in gk_feet_pts[i]]
+        gk_t = gk_team_ids[i] if i < len(gk_team_ids) else 0
+        gk_entry = {
             "bbox": goalkeeper_detections.xyxy[i].tolist(),
-            "confidence": float(goalkeeper_detections.confidence[i])
-        })
+            "ground_point_px": gk_ground_px,
+            "team": gk_t,
+            "label": f"T{gk_t}-GK",
+            "role": "goalkeeper",
+            "confidence": float(goalkeeper_detections.confidence[i]),
+            "court_position_cm": gk_court_pos,
+            "is_on_court": bool(gk_active_mask[i])
+        }
+        if enable_vlm_priors:
+            gk_entry["vlm_team_prior"] = int(gk_vlm_teams[i]) if i < len(gk_vlm_teams) and gk_vlm_teams[i] in (0, 1) else None
+            gk_entry["vlm_role_status"] = "goalkeeper"
+            gk_entry["jersey_number"] = str(gk_jersey_numbers[i]) if i < len(gk_jersey_numbers) and gk_jersey_numbers[i] else None
+            gk_entry["action_posture"] = str(gk_action_postures[i]) if i < len(gk_action_postures) and gk_action_postures[i] else "defensive_stance"
+            gk_entry["ground_contact_status"] = str(gk_ground_statuses[i]) if i < len(gk_ground_statuses) and gk_ground_statuses[i] else "visible_on_floor"
+        output["detections"]["goalkeepers"].append(gk_entry)
 
     for i in range(len(referee_detections)):
         output["detections"]["referees"].append({
@@ -736,12 +874,15 @@ def analyze_image_workflow(
         annotated_frame = team_box_annotator.annotate(annotated_frame, player_dets_colored)
         annotated_frame = team_label_annotator.annotate(annotated_frame, player_dets_colored, labels)
 
-        # Goalkeepers
+        # Goalkeepers (labeled T0-GK / T1-GK)
         if len(goalkeeper_detections) > 0:
             gk_palette = sv.ColorPalette([sv.Color.from_hex("#39FF14")])
             gk_box_annotator = sv.BoxAnnotator(color=gk_palette, thickness=3)
             gk_label_annotator = sv.LabelAnnotator(color=gk_palette, text_color=sv.Color.BLACK)
-            gk_labels = ["GK"] * len(goalkeeper_detections)
+            gk_labels = [
+                f"T{gk_team_ids[i]}-GK" if i < len(gk_team_ids) else "T0-GK"
+                for i in range(len(goalkeeper_detections))
+            ]
             annotated_frame = gk_box_annotator.annotate(annotated_frame, goalkeeper_detections)
             annotated_frame = gk_label_annotator.annotate(annotated_frame, goalkeeper_detections, gk_labels)
 
@@ -767,14 +908,30 @@ def analyze_image_workflow(
             annotated_frame = goal_box_annotator.annotate(annotated_frame, rim_detections)
             annotated_frame = goal_label_annotator.annotate(annotated_frame, rim_detections, [goal_label] * len(rim_detections))
 
-        # 2D Court / Pitch Radar Overlay for ALL sports
+        # 2D Court / Pitch Radar Overlay for ALL sports (including Goalkeepers T0-GK / T1-GK)
         court_overlay = None
-        if transformed_player_pts is not None and len(transformed_player_pts) > 0:
-            colors = [sv.Color.from_hex("#00BFFF") if t == 0 else sv.Color.from_hex("#FF1493") for t in team_ids]
-            active_pts = transformed_player_pts[active_court_mask]
-            active_colors = [colors[i] for i, m in enumerate(active_court_mask) if m]
-            if len(active_pts) > 0:
-                court_overlay = annotator.draw_court_overlay(active_pts, colors=active_colors)
+        has_active_players = transformed_player_pts is not None and len(transformed_player_pts) > 0
+        active_gk_pts = (
+            transformed_gk_pts[gk_active_mask]
+            if (transformed_gk_pts is not None and len(transformed_gk_pts) == len(gk_active_mask))
+            else None
+        )
+        active_gk_teams = [gk_team_ids[i] for i in range(len(gk_team_ids)) if i < len(gk_active_mask) and gk_active_mask[i]]
+        has_active_gks = active_gk_pts is not None and len(active_gk_pts) > 0
+        if has_active_players or has_active_gks:
+            active_pts = np.empty((0, 2), dtype=np.float32)
+            active_colors = []
+            if has_active_players:
+                colors = [sv.Color.from_hex("#00BFFF") if t == 0 else sv.Color.from_hex("#FF1493") for t in team_ids]
+                active_pts = transformed_player_pts[active_court_mask]
+                active_colors = [colors[i] for i, m in enumerate(active_court_mask) if m]
+            if len(active_pts) > 0 or has_active_gks:
+                court_overlay = annotator.draw_court_overlay(
+                    active_pts,
+                    colors=active_colors,
+                    gk_xy=active_gk_pts if has_active_gks else None,
+                    gk_teams=active_gk_teams if has_active_gks else None
+                )
                 annotated_frame = annotator.overlay_court(annotated_frame, court_overlay)
 
         def _draw_vlm_landmarks(img_canvas: np.ndarray, lm_list: list) -> np.ndarray:
@@ -846,7 +1003,8 @@ def analyze_image_workflow(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze sports images (basket, foot, handball, usfootball) and output JSON")
-    parser.add_argument("--image", type=str, required=True, help="Path to input image")
+    parser.add_argument("--image", type=str, required=False, default=None, help="Path to input image")
+    parser.add_argument("--reprocess-dir", type=str, nargs="+", default=None, help="Reprocess all *_out.json files in the given directory/directories locally (0 API cost)")
     parser.add_argument("--output", type=str, default="output.json", help="Path to output JSON")
     parser.add_argument("--debug-dir", type=str, default="out", help="Directory for debug output")
     parser.add_argument("--sport", type=str, default="auto", choices=["auto", "basket", "foot", "handball", "usfootball"], help="Sport: 'auto' (detect from path), 'basket', 'foot', 'handball', 'usfootball'")
@@ -860,28 +1018,79 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.debug_dir):
-        os.makedirs(args.debug_dir)
-
-    if args.workflow or args.workflow_json or args.backend in ["gemini-direct", "openrouter", "openai-direct", "gpt61-workflow"]:
-        wf_id = args.workflow if args.workflow else "gemini-3-8-flash-object-detection"
-        res, _ = analyze_image_workflow(
-            image_path=args.image,
-            output_path=args.output,
-            debug_dir=args.debug_dir,
-            workflow_json=args.workflow_json,
-            workflow_id=wf_id,
-            workspace_name=args.workspace,
-            backend=args.backend,
-            sport=args.sport,
-            mode=args.mode,
-            model_name=args.model,
-            enable_vlm_priors=args.vlm_priors
-        )
+    if args.reprocess_dir:
+        from src.visualization import SportsAnnotator
+        shared_court_models = {}
+        shared_annotators = {}
+        total_reprocessed = 0
+        for rdir in args.reprocess_dir:
+            if not os.path.isdir(rdir):
+                continue
+            json_files = sorted(Path(rdir).glob("*_out.json"))
+            for jf in json_files:
+                with open(jf, "r") as f:
+                    jdata = json.load(f)
+                img_path = jdata.get("image_info", {}).get("path")
+                if not img_path or not os.path.exists(img_path):
+                    print(f"Skipping {jf}: image_path '{img_path}' not found.")
+                    continue
+                sp = jdata.get("sport", args.sport)
+                md = jdata.get("mode", args.mode)
+                vp = bool(jdata.get("vlm_priors_enabled", True))
+                bk = jdata.get("performance", {}).get("backend", "openrouter")
+                mdl = jdata.get("token_usage", {}).get("model", args.model)
+                if "/" in str(mdl):
+                    bk = "openrouter"
+                sport_cfg_r = resolve_sport(sp)
+                if sp not in shared_annotators:
+                    shared_annotators[sp] = SportsAnnotator(sport=sport_cfg_r.name)
+                if sp not in shared_court_models and sport_cfg_r.keypoint_model_id:
+                    try:
+                        from inference import get_model
+                        shared_court_models[sp] = get_model(sport_cfg_r.keypoint_model_id)
+                    except Exception:
+                        shared_court_models[sp] = None
+                res, _ = analyze_image_workflow(
+                    image_path=img_path,
+                    output_path=str(jf),
+                    debug_dir=str(jf.parent),
+                    workflow_json=str(jf),
+                    backend=bk,
+                    sport=sp,
+                    mode=md,
+                    model_name=mdl,
+                    enable_vlm_priors=vp,
+                    court_model=shared_court_models.get(sp),
+                    annotator=shared_annotators.get(sp)
+                )
+                total_reprocessed += 1
+        print(f"\n✓ Locally reprocessed {total_reprocessed} JSON/image outputs across {args.reprocess_dir} (0 API cost).")
     else:
-        res, _ = analyze_image(args.image, args.output, args.debug_dir)
-        
-    if res:
-        print(f"Analysis complete. Sport: {res.get('sport')}. Found {len(res['detections']['players'])} players, {len(res['detections']['ball'])} balls, and {len(res['landmarks'])} landmarks.")
+        if not args.image:
+            parser.error("--image is required unless --reprocess-dir is specified.")
+
+        if not os.path.exists(args.debug_dir):
+            os.makedirs(args.debug_dir)
+
+        if args.workflow or args.workflow_json or args.backend in ["gemini-direct", "openrouter", "openai-direct", "gpt61-workflow"]:
+            wf_id = args.workflow if args.workflow else "gemini-3-8-flash-object-detection"
+            res, _ = analyze_image_workflow(
+                image_path=args.image,
+                output_path=args.output,
+                debug_dir=args.debug_dir,
+                workflow_json=args.workflow_json,
+                workflow_id=wf_id,
+                workspace_name=args.workspace,
+                backend=args.backend,
+                sport=args.sport,
+                mode=args.mode,
+                model_name=args.model,
+                enable_vlm_priors=args.vlm_priors
+            )
+        else:
+            res, _ = analyze_image(args.image, args.output, args.debug_dir)
+            
+        if res:
+            print(f"Analysis complete. Sport: {res.get('sport')}. Found {len(res['detections']['players'])} players, {len(res['detections']['ball'])} balls, and {len(res['landmarks'])} landmarks.")
 
 
