@@ -22,16 +22,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies for CI checks
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff yamllint pytest httpx fastapi uvicorn python-multipart python-dotenv opencv-python-headless numpy supervision
+      - name: Install CI dependencies (make install-ci)
+        run: make install-ci
 
-      - name: Run Linter (make lint)
-        run: make lint
-
-      - name: Validate Kubernetes Manifests (make validate)
-        run: make validate
-
-      - name: Run FastAPI & Homography Tests (make test)
-        run: make test
+      - name: Run All Checks (make check)
+        run: make check
