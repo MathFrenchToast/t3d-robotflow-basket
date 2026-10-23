@@ -356,6 +356,7 @@ def analyze_image_workflow(
     model_name: str = "gemini-3.6-flash",
     enable_vlm_priors: bool = False,
     annotator=None,
+    adapter: Optional[WorkflowAdapter] = None,
     court_model=None
 ):
     """
@@ -387,7 +388,8 @@ def analyze_image_workflow(
         sport_cfg = resolve_sport(sport)
     print(f"Analyzing {sport_cfg.display_name} image (sport={sport_cfg.name}, mode={mode}, backend={backend}, model={model_name}, vlm_priors={enable_vlm_priors})...")
 
-    adapter = WorkflowAdapter(workspace_name=workspace_name, workflow_id=workflow_id)
+    if adapter is None:
+        adapter = WorkflowAdapter(workspace_name=workspace_name, workflow_id=workflow_id)
 
     # 1. Fetch or load detections (VLM Inference)
     t_vlm_start = time.perf_counter()
@@ -509,6 +511,8 @@ def analyze_image_workflow(
                 inliers = vlm_inliers
                 homography_source = "vlm_landmarks_ransac"
                 print(f"  ✓ [VLM-Priors] Computed validated RANSAC homography from {vlm_inliers} VLM landmarks ({sport_cfg.name})")
+            # Ensure calc.homography_matrix matches the authoritative selected matrix (do not let VLM fallback overwrite ONNX matrix)
+            calc.homography_matrix = matrix
             landmarks.extend(matched_vlm_lms)
 
     # Transform player positions if homography computed, or fall back to robust perspective projection
@@ -516,6 +520,7 @@ def analyze_image_workflow(
     court_mask = np.ones(len(player_detections), dtype=bool)
     if len(player_detections) > 0 and feet_pts is not None:
         if matrix is not None:
+            calc.homography_matrix = matrix
             transformed_player_pts = calc.transform_points(feet_pts)
             if transformed_player_pts is not None:
                 transformed_player_pts = calc.regularize_projected_players(
@@ -527,7 +532,7 @@ def analyze_image_workflow(
                     visible_court_side=vlm_cal.get("visible_court_side", "full"),
                     enable_vlm_priors=enable_vlm_priors
                 )
-                base_margin = 85.0 if homography_source == "vlm_landmarks_ransac" else 0.0
+                base_margin = 85.0 if homography_source == "vlm_landmarks_ransac" else 35.0
                 court_mask = calc.is_on_court(transformed_player_pts, margin=base_margin)
         else:
             transformed_player_pts = calc.estimate_perspective_projection(feet_pts, (frame_h, frame_w))

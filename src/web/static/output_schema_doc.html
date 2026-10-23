@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Output Schema & HTTP Headers — T3D Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+            padding: 24px 16px 48px;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .topnav {
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 13.5px;
+        }
+
+        .topnav-brand {
+            font-weight: 700;
+            color: #0f172a;
+            text-decoration: none;
+        }
+
+        .topnav-links {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .topnav-links a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .topnav-links a:hover {
+            text-decoration: underline;
+        }
+
+        .topnav-links a.active {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .header {
+            padding: 28px 32px 22px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            font-size: 14.5px;
+            color: #475569;
+        }
+
+        .content {
+            padding: 28px 32px;
+        }
+
+        h2 {
+            font-size: 18px;
+            color: #0f172a;
+            margin: 28px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        h2:first-child {
+            margin-top: 0;
+        }
+
+        h3 {
+            font-size: 15px;
+            color: #1e293b;
+            margin: 16px 0 8px;
+        }
+
+        p {
+            color: #334155;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 12.5px;
+            border: 1px solid #e2e8f0;
+        }
+
+        pre {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            background: #f8fafc;
+            color: #0f172a;
+            padding: 14px 16px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            font-size: 12.5px;
+            overflow-x: auto;
+            margin: 10px 0 18px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 20px;
+            font-size: 13.5px;
+            border: 1px solid #e2e8f0;
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        td {
+            color: #334155;
+        }
+
+        .openapi-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .openapi-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-link {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .btn-link:hover {
+            background: #f1f5f9;
+            border-color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="topnav">
+            <a href="/" class="topnav-brand">← Back to Analyzer Web UI</a>
+            <div class="topnav-links">
+                <a href="/docs/vlm-priors">VLM Priors &amp; 2D Homography</a>
+                <a href="/docs/output-schema" class="active">JSON Schema &amp; HTTP Headers</a>
+                <a href="/docs" target="_blank" rel="noopener">OpenAPI (Swagger UI) ↗</a>
+                <a href="/redoc" target="_blank" rel="noopener">ReDoc ↗</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>Structured JSON Output &amp; HTTP Response Headers</h1>
+            <p>Reference specification for the JSON payload and binary image headers returned by <code>POST /api/analyze</code>.</p>
+        </div>
+
+        <div class="content">
+            <div class="openapi-box">
+                <div>
+                    <strong>Interactive OpenAPI Specifications:</strong>
+                    <span style="color: #475569; font-size: 13.5px; margin-left: 6px;">Explore and test all endpoints directly from your browser.</span>
+                </div>
+                <div class="openapi-links">
+                    <a href="/docs" target="_blank" rel="noopener" class="btn-link">Swagger UI (/docs) ↗</a>
+                    <a href="/redoc" target="_blank" rel="noopener" class="btn-link">ReDoc (/redoc) ↗</a>
+                    <a href="/openapi.json" target="_blank" rel="noopener" class="btn-link">openapi.json ↗</a>
+                </div>
+            </div>
+
+            <h2>1. Top-Level JSON Structure (<code>output_format="json"</code>)</h2>
+            <p>When calling <code>POST /api/analyze</code> with <code>output_format="json"</code> (default), the response has the following structure:</p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>success</code></td>
+                        <td><code>boolean</code></td>
+                        <td><code>true</code> when analysis completed normally.</td>
+                    </tr>
+                    <tr>
+                        <td><code>sport</code></td>
+                        <td><code>string</code></td>
+                        <td>Resolved canonical sport key: <code>"basket"</code>, <code>"foot"</code>, <code>"handball"</code>, or <code>"usfootball"</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>image_info</code></td>
+                        <td><code>object</code></td>
+                        <td>Input image dimensions: <code>width</code> (px), <code>height</code> (px), and original <code>filename</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>performance</code></td>
+                        <td><code>object</code></td>
+                        <td>Execution latency breakdown in seconds (see Section 2 below).</td>
+                    </tr>
+                    <tr>
+                        <td><code>homography</code></td>
+                        <td><code>object</code></td>
+                        <td>2D court calibration metadata: <code>computed</code> (bool), <code>source</code> (<code>"onnx_keypoints_ransac"</code>, <code>"vlm_landmarks_ransac"</code>, or <code>"perspective_fallback"</code>), <code>visible_court_side</code> (<code>"left"</code>, <code>"right"</code>, <code>"full"</code>), <code>inliers_count</code>, and the 3×3 <code>matrix</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>detections</code></td>
+                        <td><code>object</code></td>
+                        <td>Categorized object detections: <code>players</code>, <code>goalkeepers</code>, <code>referees</code>, <code>ball</code>, <code>goal_or_basket</code>, and <code>field_marks</code> (see Section 3).</td>
+                    </tr>
+                    <tr>
+                        <td><code>landmarks</code></td>
+                        <td><code>array</code></td>
+                        <td>Detected court keypoints in pixel coordinates <code>(x, y)</code> with <code>label</code>, <code>confidence</code>, and <code>source</code> (<code>"onnx_model"</code>, <code>"vlm_prior"</code>, or <code>"goal_bbox_anchor"</code>).</td>
+                    </tr>
+                    <tr>
+                        <td><code>token_usage</code></td>
+                        <td><code>object</code></td>
+                        <td>VLM token consumption and cost: <code>prompt_tokens</code>, <code>candidates_tokens</code>, <code>thoughts_tokens</code>, <code>total_tokens</code>, <code>cost_usd</code>, and <code>model</code>.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>2. Performance &amp; Latency Block (<code>performance</code>)</h2>
+            <p>Every JSON response includes exact server-side timing (in seconds) for each stage of the pipeline:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>vlm_inference_seconds</code></td>
+                        <td><code>float</code></td>
+                        <td>Time spent waiting for the VLM API (OpenRouter / Google Gemini).</td>
+                    </tr>
+                    <tr>
+                        <td><code>court_homography_seconds</code></td>
+                        <td><code>float</code></td>
+                        <td>Time spent running ONNX keypoint detection, RANSAC homography estimation, and 2D player projection.</td>
+                    </tr>
+                    <tr>
+                        <td><code>team_classification_seconds</code></td>
+                        <td><code>float</code></td>
+                        <td>Time spent classifying player/goalkeeper teams (<code>T0</code>/<code>T1</code>, <code>T0-GK</code>/<code>T1-GK</code>) and active/bench filtering.</td>
+                    </tr>
+                    <tr>
+                        <td><code>warm_pipeline_seconds</code></td>
+                        <td><code>float</code></td>
+                        <td><strong>Total end-to-end processing time</strong> for the request (in seconds).</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>3. Player &amp; Goalkeeper Detection Objects (<code>detections.players</code> / <code>detections.goalkeepers</code>)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Type</th>
+                        <th>Units / Values</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>bbox</code></td>
+                        <td><code>[x1, y1, x2, y2]</code></td>
+                        <td>Pixels (<code>px</code>)</td>
+                        <td>2D bounding box in image pixel coordinates.</td>
+                    </tr>
+                    <tr>
+                        <td><code>ground_point_px</code></td>
+                        <td><code>[x, y]</code></td>
+                        <td>Pixels (<code>px</code>)</td>
+                        <td>Estimated floor contact point (<code>Z = 0</code>) in the image.</td>
+                    </tr>
+                    <tr>
+                        <td><code>team</code></td>
+                        <td><code>0 | 1</code></td>
+                        <td>Team ID</td>
+                        <td>Assigned team index (<code>0</code> = Team 0 / Cyan, <code>1</code> = Team 1 / Pink).</td>
+                    </tr>
+                    <tr>
+                        <td><code>label</code></td>
+                        <td><code>string</code></td>
+                        <td><code>"T0"</code>, <code>"T1"</code>, <code>"T0-GK"</code>, <code>"T1-GK"</code></td>
+                        <td>Display label distinguishing outfield players and goalkeepers.</td>
+                    </tr>
+                    <tr>
+                        <td><code>role</code></td>
+                        <td><code>string</code></td>
+                        <td><code>"player"</code> | <code>"goalkeeper"</code></td>
+                        <td>Tactical role on the court/pitch.</td>
+                    </tr>
+                    <tr>
+                        <td><code>court_position_cm</code></td>
+                        <td><code>[X_cm, Y_cm]</code></td>
+                        <td>Centimeters (<code>cm</code>)</td>
+                        <td>Projected 2D top-down radar coordinates from top-left corner <code>(0, 0)</code> of the canonical court:<br>
+                        • Basketball (NBA): <code>2865 × 1524 cm</code><br>
+                        • Football (Soccer): <code>12000 × 7000 cm</code><br>
+                        • Handball (IHF): <code>4000 × 2000 cm</code><br>
+                        • US Football (NFL): <code>10973 × 4877 cm</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>is_on_court</code></td>
+                        <td><code>boolean</code></td>
+                        <td><code>true | false</code></td>
+                        <td><code>true</code> if the player is active on the court (drawn on the 2D radar); <code>false</code> if on the bench / out-of-bounds.</td>
+                    </tr>
+                    <tr>
+                        <td><code>jersey_number</code></td>
+                        <td><code>string | null</code></td>
+                        <td>e.g. <code>"24"</code></td>
+                        <td>Recognized jersey number when legible.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>4. HTTP Headers When Returning an Image Directly (<code>output_format="image" | "annotated"</code>)</h2>
+            <p>
+                When calling <code>POST /api/analyze</code> with <code>output_format="image"</code> (or <code>"side_by_side"</code>, <code>"annotated"</code>, or <code>return_image=true</code>), the HTTP response body is the raw binary <code>image/jpeg</code> file, and key telemetry metrics are returned in custom HTTP response headers:
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>HTTP Response Header</th>
+                        <th>Example Value</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Content-Type</code></td>
+                        <td><code>image/jpeg</code></td>
+                        <td>MIME type of the returned visualization image.</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Detected-Sport</code></td>
+                        <td><code>basket</code></td>
+                        <td>Resolved sport key used for analysis and radar drawing.</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Homography-Source</code></td>
+                        <td><code>onnx_keypoints_ransac</code></td>
+                        <td>Method used to compute the 2D radar homography.</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Players-Count</code></td>
+                        <td><code>10</code></td>
+                        <td>Total number of detected players.</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Goalkeepers-Count</code></td>
+                        <td><code>0</code></td>
+                        <td>Total number of detected goalkeepers (<code>T0-GK</code> / <code>T1-GK</code>).</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Processing-Time-Seconds</code></td>
+                        <td><code>34.6587</code></td>
+                        <td>Total warm pipeline execution time in seconds (<code>performance.warm_pipeline_seconds</code>).</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-VLM-Inference-Seconds</code></td>
+                        <td><code>33.914</code></td>
+                        <td>VLM inference time in seconds (<code>performance.vlm_inference_seconds</code>).</td>
+                    </tr>
+                    <tr>
+                        <td><code>X-Estimated-Cost-USD</code></td>
+                        <td><code>0.0283635</code></td>
+                        <td>VLM API call cost in USD (<code>token_usage.cost_usd</code>).</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Example <code>curl</code> Inspecting Image Headers</h3>
+            <pre>curl -D - -X POST http://localhost:8001/api/analyze \
+  -F "image=@tests/basket/basket-01.png" \
+  -F "sport=basket" \
+  -F "output_format=image" \
+  -o basket_side_by_side.jpg</pre>
+        </div>
+    </div>
+</body>
+</html>

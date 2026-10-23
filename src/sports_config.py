@@ -41,13 +41,14 @@ SPORTS_CONFIGS: Dict[str, SportConfig] = {
             "- 'field_marks': tactical court lines (the key / paint boundary, free-throw circle, 3-point line, center circle)."
         ),
         vlm_landmarks_prompt=(
-            "Identify visible basketball court keypoint intersections from this canonical list "
-            "(note: 'far' = top of image / far sideline Y=0, 'near' = bottom of image / near sideline Y=1524):\n"
+            "Identify visible basketball court FLOOR line intersections from this canonical list "
+            "(all points MUST be on the wooden/painted court floor Z=0, never up in the air on the hoop; "
+            "'far' = top of image / far sideline Y=0, 'near' = bottom of image / near sideline Y=1524):\n"
             "  Left half-court: 'left_corner_far', 'left_corner_near', 'left_paint_far_baseline', 'left_paint_near_baseline', "
-            "'left_ft_line_far', 'left_ft_line_near', 'left_ft_circle_apex', 'left_3pt_top_of_arc', 'left_basket_ring'\n"
+            "'left_ft_line_far', 'left_ft_line_near', 'left_ft_circle_apex', 'left_3pt_top_of_arc', 'left_restricted_arc_apex'\n"
             "  Center court: 'center_line_far', 'center_circle_center', 'center_line_near'\n"
             "  Right half-court: 'right_corner_far', 'right_corner_near', 'right_paint_far_baseline', 'right_paint_near_baseline', "
-            "'right_ft_line_far', 'right_ft_line_near', 'right_ft_circle_apex', 'right_3pt_top_of_arc', 'right_basket_ring'"
+            "'right_ft_line_far', 'right_ft_line_near', 'right_ft_circle_apex', 'right_3pt_top_of_arc', 'right_restricted_arc_apex'"
         ),
         canonical_landmarks_cm={
             "left_corner_far": (0.0, 0.0),
@@ -58,7 +59,7 @@ SPORTS_CONFIGS: Dict[str, SportConfig] = {
             "left_ft_line_near": (579.0, 1006.0),
             "left_ft_circle_apex": (759.0, 762.0),
             "left_3pt_top_of_arc": (884.0, 762.0),
-            "left_basket_ring": (160.0, 762.0),
+            "left_restricted_arc_apex": (282.0, 762.0),
             "center_line_far": (1432.5, 0.0),
             "center_circle_center": (1432.5, 762.0),
             "center_line_near": (1432.5, 1524.0),
@@ -70,7 +71,7 @@ SPORTS_CONFIGS: Dict[str, SportConfig] = {
             "right_ft_line_near": (2286.0, 1006.0),
             "right_ft_circle_apex": (2106.0, 762.0),
             "right_3pt_top_of_arc": (1981.0, 762.0),
-            "right_basket_ring": (2705.0, 762.0),
+            "right_restricted_arc_apex": (2583.0, 762.0),
         }
     ),
     "foot": SportConfig(

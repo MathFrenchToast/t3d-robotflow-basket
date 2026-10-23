@@ -189,13 +189,21 @@ async def analyze(
             target_img = annotated_frame if fmt in ("annotated", "overlay") else side_by_side
             jpeg_bytes = _encode_jpeg(target_img)
 
+            perf = output.get("performance", {})
+            usage = output.get("token_usage", {})
             headers = {
                 "X-Detected-Sport": str(output.get("sport", resolved_sport)),
                 "X-Homography-Source": str(output.get("homography", {}).get("source", "none")),
                 "X-Players-Count": str(len(output.get("detections", {}).get("players", []))),
                 "X-Goalkeepers-Count": str(len(output.get("detections", {}).get("goalkeepers", []))),
             }
-            cost = output.get("token_usage", {}).get("estimated_cost_usd")
+            proc_time = perf.get("warm_pipeline_seconds")
+            if proc_time is not None:
+                headers["X-Processing-Time-Seconds"] = str(proc_time)
+            vlm_time = perf.get("vlm_inference_seconds")
+            if vlm_time is not None:
+                headers["X-VLM-Inference-Seconds"] = str(vlm_time)
+            cost = usage.get("cost_usd") if usage.get("cost_usd") is not None else usage.get("estimated_cost_usd")
             if cost is not None:
                 headers["X-Estimated-Cost-USD"] = str(cost)
 
@@ -277,6 +285,18 @@ async def visualize(
         import traceback
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
+@app.get("/docs/vlm-priors")
+async def vlm_priors_doc():
+    """Serve technical documentation page for VLM Probabilistic Priors & RANSAC 2D Homography."""
+    return FileResponse(str(STATIC_DIR / "vlm_priors_doc.html"), media_type="text/html")
+
+
+@app.get("/docs/output-schema")
+async def output_schema_doc():
+    """Serve technical documentation page for JSON Output Schema & HTTP Headers."""
+    return FileResponse(str(STATIC_DIR / "output_schema_doc.html"), media_type="text/html")
 
 
 @app.get("/")

@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: t3d-sport-api
         app.kubernetes.io/part-of: t3d
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: api
           image: ghcr.io/mathfrenchtoast/t3d-robotflow-basket:latest
