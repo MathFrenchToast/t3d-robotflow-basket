@@ -397,12 +397,18 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="model">VLM Model &amp; Backend</label>
+                        <label for="model">VLM Model (OpenRouter)</label>
                         <select id="model">
-                            <option value="openrouter|openai/gpt-6-sol" selected>OpenRouter — openai/gpt-6-sol (Default)</option>
-                            <option value="openrouter|google/gemini-2.5-pro">OpenRouter — google/gemini-2.5-pro</option>
-                            <option value="openrouter|google/gemini-2.5-flash">OpenRouter — google/gemini-2.5-flash</option>
-                            <option value="gemini-direct|gemini-3.6-flash">Gemini Direct — gemini-3.6-flash</option>
+                            <option value="openrouter|google/gemini-3.8-flash" selected>Google — gemini-3.8-flash (Default • Fast &amp; Accurate)</option>
+                            <option value="openrouter|google/gemini-4-argon">Google — gemini-4-argon (Flagship Oct 2026)</option>
+                            <option value="openrouter|openai/gpt-6.1-sol">OpenAI — gpt-6.1-sol (Sept 2026)</option>
+                            <option value="openrouter|openai/gpt-6.1-sol-pro">OpenAI — gpt-6.1-sol-pro</option>
+                            <option value="openrouter|openai/gpt-6-luna">OpenAI — gpt-6-luna (Fast • Low-Cost)</option>
+                            <option value="openrouter|anthropic/claude-sonnet-5.5">Anthropic — claude-sonnet-5.5</option>
+                            <option value="openrouter|anthropic/claude-haiku-5.5">Anthropic — claude-haiku-5.5 (Oct 2026 • Fast)</option>
+                            <option value="openrouter|qwen/qwen3.8-omni-flash">Qwen — qwen3.8-omni-flash</option>
+                            <option value="openrouter|qwen/qwen3.8-max-prime">Qwen — qwen3.8-max-prime</option>
+                            <option value="openrouter|deepseek/deepseek-v4.1-flash-1017">DeepSeek — deepseek-v4.1-flash-1017 (Oct 2026)</option>
                         </select>
                     </div>
 
@@ -520,8 +526,15 @@
             });
 
             if (!vizResponse.ok) {
-                const err = await vizResponse.json();
-                throw new Error(err.error || 'Visualization failed');
+                const rawErr = await vizResponse.text();
+                let errMsg = `Visualization failed (HTTP ${vizResponse.status})`;
+                try {
+                    const parsedErr = JSON.parse(rawErr);
+                    if (parsedErr && parsedErr.error) errMsg = parsedErr.error;
+                } catch (_) {
+                    if (rawErr && rawErr.length < 200) errMsg += `: ${rawErr}`;
+                }
+                throw new Error(errMsg);
             }
 
             const blob = await vizResponse.blob();
@@ -565,8 +578,15 @@
                 });
 
                 if (!analyzeResponse.ok) {
-                    const error = await analyzeResponse.json();
-                    throw new Error(error.error || 'Analysis failed');
+                    const rawErr = await analyzeResponse.text();
+                    let errMsg = `Analysis failed (HTTP ${analyzeResponse.status})`;
+                    try {
+                        const parsedErr = JSON.parse(rawErr);
+                        if (parsedErr && parsedErr.error) errMsg = parsedErr.error;
+                    } catch (_) {
+                        if (rawErr && rawErr.length < 200) errMsg += `: ${rawErr}`;
+                    }
+                    throw new Error(errMsg);
                 }
 
                 const analyzeResult = await analyzeResponse.json();

@@ -515,7 +515,7 @@ class WorkflowAdapter:
         self,
         image_input: Union[str, np.ndarray],
         classes: Optional[List[str]] = None,
-        model_name: str = "google/gemini-2.5-pro",
+        model_name: str = "google/gemini-3.8-flash",
         sport: str = "basket",
         mode: str = "high",
         enable_vlm_priors: bool = False
@@ -538,11 +538,9 @@ class WorkflowAdapter:
         frame = read_image_robust(image_input)
         fh, fw = frame.shape[:2]
 
-        # Normalize model_name if passed without provider prefix or with 6.1 alias
+        # Normalize model_name if passed without provider prefix
         or_model = model_name.strip()
-        if or_model.lower() in ("gpt-6.1-sol", "openai/gpt-6.1-sol", "gpt-6-sol"):
-            or_model = "openai/gpt-6-sol"
-        elif "/" not in or_model:
+        if "/" not in or_model:
             low = or_model.lower()
             if low.startswith("gemini"):
                 or_model = f"google/{or_model}"
@@ -554,6 +552,8 @@ class WorkflowAdapter:
                 or_model = f"mistralai/{or_model}"
             elif low.startswith("qwen"):
                 or_model = f"qwen/{or_model}"
+            elif low.startswith("deepseek"):
+                or_model = f"deepseek/{or_model}"
             elif low.startswith("grok"):
                 or_model = f"x-ai/{or_model}"
 
