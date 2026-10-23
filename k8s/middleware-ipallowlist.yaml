@@ -1,0 +1,12 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: t3d-ip-allowlist
+  namespace: t3d
+  labels:
+    app.kubernetes.io/name: t3d-sport-api
+    app.kubernetes.io/part-of: t3d
+spec:
+  ipAllowList:
+    sourceRange:
+      - 90.89.49.216/32
