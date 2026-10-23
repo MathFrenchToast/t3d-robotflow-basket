@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLM Probabilistic Priors & RANSAC 2D Homography — T3D Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+            padding: 24px 16px 48px;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .topnav {
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 13.5px;
+        }
+
+        .topnav-brand {
+            font-weight: 700;
+            color: #0f172a;
+            text-decoration: none;
+        }
+
+        .topnav-links {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .topnav-links a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .topnav-links a:hover {
+            text-decoration: underline;
+        }
+
+        .topnav-links a.active {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .header {
+            padding: 28px 32px 22px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            font-size: 14.5px;
+            color: #475569;
+        }
+
+        .content {
+            padding: 28px 32px;
+        }
+
+        h2 {
+            font-size: 18px;
+            color: #0f172a;
+            margin: 28px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        h2:first-child {
+            margin-top: 0;
+        }
+
+        h3 {
+            font-size: 15px;
+            color: #1e293b;
+            margin: 14px 0 6px;
+        }
+
+        p {
+            color: #334155;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        ul {
+            margin: 6px 0 14px 20px;
+            color: #334155;
+            font-size: 14px;
+        }
+
+        li {
+            margin-bottom: 5px;
+        }
+
+        code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 12.5px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 16px;
+            margin: 14px 0 20px;
+        }
+
+        .card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px 18px;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #0f172a;
+        }
+
+        .pipeline-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin: 14px 0 22px;
+        }
+
+        .step-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-top: 3px solid #2563eb;
+            border-radius: 6px;
+            padding: 14px;
+        }
+
+        .step-box .step-num {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #2563eb;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .step-box .step-title {
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        .step-box p {
+            font-size: 13px;
+            margin-bottom: 0;
+            color: #475569;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 20px;
+            font-size: 13.5px;
+            border: 1px solid #e2e8f0;
+        }
+
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        td {
+            color: #334155;
+        }
+
+        .callout {
+            background: #eff6ff;
+            border-left: 4px solid #2563eb;
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin: 14px 0;
+            font-size: 13.5px;
+            color: #1e3a8a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="topnav">
+            <a href="/" class="topnav-brand">← Back to Analyzer Web UI</a>
+            <div class="topnav-links">
+                <a href="/docs/vlm-priors" class="active">VLM Priors &amp; 2D Homography</a>
+                <a href="/docs/output-schema">JSON Schema &amp; HTTP Headers</a>
+                <a href="/docs" target="_blank" rel="noopener">OpenAPI (Swagger UI) ↗</a>
+                <a href="/redoc" target="_blank" rel="noopener">ReDoc ↗</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>VLM Probabilistic Priors &amp; Court Calibration Landmarks (RANSAC 2D Homography)</h1>
+            <p>Technical explanation of the <code>vlm_priors</code> option in <code>POST /api/analyze</code> and how semantic priors combine with geometric RANSAC verification.</p>
+        </div>
+
+        <div class="content">
+            <h2>1. Why Standard Bounding-Box + Color Clustering Is Not Enough</h2>
+            <p>
+                Across <strong>Basketball</strong>, <strong>Football (Soccer)</strong>, <strong>Handball</strong>, and <strong>US Football</strong>, relying solely on 2D bounding boxes and pixel color clustering introduces four classic issues:
+            </p>
+            <ul>
+                <li><strong>Bench &amp; Sideline Contamination:</strong> Substitutes, coaches, or staff standing near the boundary line wear team colors and get falsely projected onto the active 2D radar.</li>
+                <li><strong>Jumping &amp; Occluded Players:</strong> Using the bottom-center of a bounding box as a player's floor position projects jumping players (layups, headers, jump-shots) several meters further away than their true takeoff spot.</li>
+                <li><strong>Lighting &amp; Jersey Ambiguities:</strong> Stadium shadows, motion blur, or dark/light kits can cause pure RGB/LAB clustering to swap a player's team.</li>
+                <li><strong>Missing Keypoint Models:</strong> Specialized ONNX keypoint detectors can fail on tight camera zooms or sports without a dedicated keypoint model (e.g., Handball or US Football).</li>
+            </ul>
+
+            <div class="callout">
+                <strong>Single-Pass Design (0 Extra API Calls):</strong> Enabling <code>vlm_priors=true</code> does not trigger a second VLM call. It enriches the JSON schema of the primary detection pass with semantic player attributes and court calibration landmarks.
+            </div>
+
+            <h2>2. The Four Pillars of VLM Probabilistic Priors</h2>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h3>A. Bayesian Team &amp; Goalkeeper Classification</h3>
+                    <p>
+                        For each player, the VLM outputs a prior <code>team_id ∈ {0, 1}</code> based on holistic visual context (jersey, shorts, socks, helmet, and formation).
+                    </p>
+                    <ul>
+                        <li>Fused with unsupervised CIE-LAB &amp; HSV torso color clustering to resolve shadow/lighting ambiguities.</li>
+                        <li><strong>Goalkeepers (<code>T0-GK</code> / <code>T1-GK</code>):</strong> In Football and Handball, goalkeepers wear distinct kits. Their team is resolved from their 2D goal-area position, defending team proximity, and VLM team polarity.</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3>B. Active vs. Bench Role Filtering (<code>role_status</code>)</h3>
+                    <p>
+                        Every detected player is tagged with a role status:
+                    </p>
+                    <ul>
+                        <li><code>active_on_court</code>: Active player participating in play.</li>
+                        <li><code>active_inbound</code>: Player standing just outside the boundary line performing a throw-in or inbound pass (kept active on the radar).</li>
+                        <li><code>bench_off_court</code>: Substitute on the bench or sideline staff — labeled <code>(Bench)</code> on the image and excluded from the 2D radar.</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3>C. Biomechanical Ground-Contact Estimation</h3>
+                    <p>
+                        To project a 2D bounding box onto the 2D court plane (<code>Z = 0</code>), we need the pixel where the player touches the floor:
+                    </p>
+                    <ul>
+                        <li>The VLM predicts <code>action_posture</code> (<code>standing_running</code>, <code>jumping_shoot</code>, <code>defensive_stance</code>) and <code>ground_contact_status</code> (<code>visible_on_floor</code>, <code>airborne</code>, <code>truncated_bottom_edge</code>).</li>
+                        <li>It also predicts <code>ground_point_norm</code>: the floor contact point directly beneath the player's center of mass.</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3>D. Court Calibration Landmarks &amp; RANSAC Homography</h3>
+                    <p>
+                        In the <code>court_calibration</code> block, the VLM identifies:
+                    </p>
+                    <ul>
+                        <li><code>visible_court_side</code> (<code>left</code>, <code>right</code>, or <code>full</code>).</li>
+                        <li><code>keypoints</code>: Floor-level line intersections (penalty box corners, free-throw line corners, 6m/9m handball arcs, NFL yard-line/hash intersections).</li>
+                        <li><code>court_zone_hint</code> per player to regularize steep camera perspective.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>3. Hybrid RANSAC 2D Homography Pipeline</h2>
+
+            <div class="pipeline-steps">
+                <div class="step-box">
+                    <div class="step-num">Step 1</div>
+                    <div class="step-title">Keypoint Priority</div>
+                    <p>Uses the specialized ONNX court keypoint model first when available (≥ 4 RANSAC inliers), or falls back to VLM court landmarks + goal bbox anchors.</p>
+                </div>
+                <div class="step-box">
+                    <div class="step-num">Step 2</div>
+                    <div class="step-title">RANSAC Validation</div>
+                    <p>Computes the 3×3 homography matrix <code>H</code> with outlier rejection against official court dimensions in centimeters.</p>
+                </div>
+                <div class="step-box">
+                    <div class="step-num">Step 3</div>
+                    <div class="step-title">Ground Projection</div>
+                    <p>Projects each player's and goalkeeper's floor contact point <code>(x_px, y_px)</code> to metric court coordinates <code>(X_cm, Y_cm)</code>.</p>
+                </div>
+                <div class="step-box">
+                    <div class="step-num">Step 4</div>
+                    <div class="step-title">Rule Regularization</div>
+                    <p>Applies sport rules (e.g. max 5v5 on court in basketball, IHF 6m goal-area rules in handball, max 1 goalkeeper per goal half).</p>
+                </div>
+            </div>
+
+            <h2>4. Summary Comparison</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Disabled (<code>vlm_priors=false</code>)</th>
+                        <th>Enabled (<code>vlm_priors=true</code> — Default)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Team Assignment (<code>T0</code> / <code>T1</code>)</strong></td>
+                        <td>KMeans color clustering only</td>
+                        <td>Hybrid CIE-LAB/HSV clustering + VLM Bayesian team prior</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bench / Sideline Filtering</strong></td>
+                        <td>Geometric court bounds only</td>
+                        <td>Semantic <code>bench_off_court</code> &amp; <code>active_inbound</code> filtering</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Jumping / Truncated Players</strong></td>
+                        <td>Bottom-center of 2D bounding box</td>
+                        <td>Posture-compensated floor contact projection</td>
+                    </tr>
+                    <tr>
+                        <td><strong>2D Court Homography</strong></td>
+                        <td>ONNX keypoint model only (perspective fallback otherwise)</td>
+                        <td>ONNX keypoints (priority) + VLM RANSAC landmarks + Goal anchors</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

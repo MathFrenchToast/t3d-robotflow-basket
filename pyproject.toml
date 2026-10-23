@@ -23,3 +23,19 @@ dependencies = [
 [tool.uv.sources]
 sports = { git = "https://github.com/roboflow/sports.git", rev = "feat/basketball" }
 
+[dependency-groups]
+dev = [
+    "httpx>=0.27.0",
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+    "yamllint>=1.35.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+
