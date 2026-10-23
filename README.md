@@ -167,20 +167,15 @@ PYTHONPATH=. .venv/bin/python -m src.run_batch_sports \
 
 ### 2. Namespace & Manifests Architecture (Kustomize, No Helm Needed)
 All Kubernetes resources are managed via **Kustomize** in [`k8s/kustomization.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/kustomization.yaml) and strictly isolated in the **`t3d`** namespace:
-- **Namespace Creation**: Included directly in [`k8s/kustomization.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/kustomization.yaml) via [`k8s/namespace.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/namespace.yaml) (and `CreateNamespace=true` in [`k8s/argocd-application.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/argocd-application.yaml)).
+- **Namespace Manifest ([`k8s/namespace.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/namespace.yaml))**: Because Kubernetes Secrets are namespaced resources (`-n t3d`), you must apply `k8s/namespace.yaml` **first** (at the start of Step 3 below) before creating the secrets. It is also included in [`k8s/kustomization.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/kustomization.yaml) so subsequent `kubectl apply` / ArgoCD syncs remain 100% declarative and idempotent.
 - **TLS & Gateway API**: [`k8s/gateway.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/gateway.yaml) provisions a dedicated `ClusterIssuer` (`letsencrypt-t3d-prod`), Let's Encrypt `Certificate` (`t3d-gateway-tls`), and Traefik `Gateway` (`t3d-gateway`) for `api.t3d.frenchtoast.dev`, routed by [`k8s/httproute.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/httproute.yaml).
 
-### 3. Required Kubernetes Secrets (One-Time Setup on `vm-hostinger`)
-Because secrets must never be committed to Git, two secrets must be created in the `t3d` namespace before the first deployment:
+### 3. Create Namespace & Required Kubernetes Secrets (One-Time Setup on `vm-hostinger`)
+Because secrets must never be committed to Git, apply [`k8s/namespace.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/namespace.yaml) first and then create the two secrets in the `t3d` namespace before deploying the application:
 
-1. **Create the `t3d` namespace (or apply `k8s/namespace.yaml`):**
+1. **Step 3.1 — Create the `t3d` namespace using [`k8s/namespace.yaml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/k8s/namespace.yaml):**
    ```bash
-   ssh vm-hostinger "kubectl apply -f - <<EOF
-   apiVersion: v1
-   kind: Namespace
-   metadata:
-     name: t3d
-   EOF"
+   ssh vm-hostinger "kubectl apply -f -" < k8s/namespace.yaml
    ```
 
 2. **Secret #1 — `ghcr-secret` (to pull images from `ghcr.io`):**
@@ -239,6 +234,22 @@ ssh vm-hostinger "kubectl get pods,svc,httproute -n t3d && kubectl get gateway,c
   ssh vm-hostinger "kubectl apply -f -" < k8s/argocd-application.yaml
   ```
   ArgoCD will then automatically sync any changes pushed to `k8s/` on `main` (`prune: true`, `selfHeal: true`).
+
+---
+
+## Local & CI Quality Checks (`Makefile`)
+
+The repository enforces identical quality gates locally and in GitHub Actions ([`.github/workflows/ci.yml`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/.github/workflows/ci.yml)) via the root [`Makefile`](file:///home/mathieu/dev/projects/T3D/t3d-robotflow-basket/Makefile):
+
+```bash
+# Run all checks (Python + YAML linters, K8s kustomize validation, FastAPI & homography tests)
+make check
+
+# Or run individual targets:
+make lint      # ruff check src/ + yamllint -c .yamllint.yml k8s/ .github/workflows/
+make validate  # kubectl kustomize k8s/ > /dev/null
+make test      # pytest -v src/test_ci.py
+```
 
 ---
 
