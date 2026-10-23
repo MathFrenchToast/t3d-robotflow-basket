@@ -1,7 +1,17 @@
+import sys
+import types
 import supervision as sv
 import cv2
 import numpy as np
 from typing import Optional, List, Union
+
+# Prevent roboflow/sports top-level __init__.py from pulling torch/umap/transformers/scipy
+# in lightweight CPU-only environments (Docker slim / GitHub Actions CI).
+for _mod_name, _attr_name in (("sports.common.team", "TeamClassifier"), ("sports.common.path", "clean_paths")):
+    if _mod_name not in sys.modules:
+        _stub = types.ModuleType(_mod_name)
+        setattr(_stub, _attr_name, None)
+        sys.modules[_mod_name] = _stub
 
 from sports.basketball import (
     CourtConfiguration,

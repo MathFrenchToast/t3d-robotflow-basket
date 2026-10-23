@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir \
     "opencv-python-headless>=4.10.0.84" \
     "scikit-learn>=1.5.0" \
     "supervision>=0.25.0" \
-    "git+https://github.com/roboflow/sports.git@feat/basketball"
+    && pip install --no-cache-dir --no-deps "git+https://github.com/roboflow/sports.git@feat/basketball"
 
 COPY src/ ./src/
 

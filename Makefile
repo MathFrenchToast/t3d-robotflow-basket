@@ -30,8 +30,8 @@ install-ci:
 		"numpy>=1.26.0" \
 		"opencv-python-headless>=4.10.0.84" \
 		"scikit-learn>=1.5.0" \
-		"supervision>=0.25.0" \
-		"git+https://github.com/roboflow/sports.git@feat/basketball"
+		"supervision>=0.25.0"
+	$(PYTHON) -m pip install --no-deps "git+https://github.com/roboflow/sports.git@feat/basketball"
 
 lint:
 	@echo "==> Running Python linter (ruff)..."

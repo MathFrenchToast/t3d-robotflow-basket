@@ -1,6 +1,8 @@
 """Deterministic CI & local test suite for T3D Multi-Sport Analyzer & FastAPI server."""
 
 import json
+import subprocess
+import sys
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
@@ -8,6 +10,26 @@ from fastapi.testclient import TestClient
 from src.court_homography import CourtHomographyCalculator
 from src.sports_config import SPORTS_CONFIGS, resolve_sport
 from src.web.app import app
+
+
+def test_cpu_only_import_without_torch() -> None:
+    """Ensure FastAPI app, visualization, and homography import cleanly when torch is absent (Docker slim / CI)."""
+    code = (
+        "import importlib.abc, sys\n"
+        "class BlockHeavyLibs(importlib.abc.MetaPathFinder):\n"
+        "    def find_spec(self, fullname, path, target=None):\n"
+        "        if fullname.split('.')[0] in ('torch', 'umap', 'transformers'):\n"
+        "            raise ModuleNotFoundError(f'Blocked {fullname}')\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, BlockHeavyLibs())\n"
+        "from src.web.app import app\n"
+        "from src.visualization import SportsAnnotator\n"
+        "annot = SportsAnnotator(sport='basket')\n"
+        "assert annot.court_config is not None\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, f"Import without torch failed:\n{proc.stderr}"
+
 
 
 def test_sports_configs_floor_landmarks() -> None:

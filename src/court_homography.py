@@ -1,7 +1,15 @@
+import sys
+import types
 import cv2
 import numpy as np
 from typing import Optional, Tuple, List, Dict, Any
 import supervision as sv
+
+for _mod_name, _attr_name in (("sports.common.team", "TeamClassifier"), ("sports.common.path", "clean_paths")):
+    if _mod_name not in sys.modules:
+        _stub = types.ModuleType(_mod_name)
+        setattr(_stub, _attr_name, None)
+        sys.modules[_mod_name] = _stub
 
 try:
     from sports.basketball import CourtConfiguration, League
