@@ -85,6 +85,10 @@ def test_fastapi_endpoints_and_visualize() -> None:
         assert r_ui.status_code == 200
         assert "T3D Multi-Sport Image Analyzer" in r_ui.text
 
+        r_doc_hub = client.get("/documentation")
+        assert r_doc_hub.status_code == 200
+        assert "Documentation Hub" in r_doc_hub.text
+
         r_doc1 = client.get("/docs/vlm-priors")
         assert r_doc1.status_code == 200
         assert "VLM Probabilistic Priors" in r_doc1.text

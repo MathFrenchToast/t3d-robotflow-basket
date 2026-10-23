@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation — T3D Multi-Sport AI Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+            padding: 24px 16px 48px;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+        }
+
+        .topnav {
+            background: #f1f5f9;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 13.5px;
+        }
+
+        .topnav-brand {
+            font-weight: 700;
+            color: #0f172a;
+            text-decoration: none;
+        }
+
+        .topnav-links {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .topnav-links a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .topnav-links a:hover {
+            text-decoration: underline;
+        }
+
+        .topnav-links a.active {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .header {
+            padding: 28px 32px 22px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            font-size: 14.5px;
+            color: #475569;
+        }
+
+        .content {
+            padding: 28px 32px;
+        }
+
+        .doc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 18px;
+            margin-bottom: 24px;
+        }
+
+        .doc-card {
+            display: block;
+            padding: 20px 22px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #ffffff;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .doc-card:hover {
+            border-color: #2563eb;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+        }
+
+        .doc-card-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #2563eb;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .doc-card h2 {
+            font-size: 16.5px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 6px;
+        }
+
+        .doc-card p {
+            font-size: 13.5px;
+            color: #475569;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="topnav">
+            <a href="/" class="topnav-brand">← Back to Analyzer UI</a>
+            <div class="topnav-links">
+                <a href="/documentation" class="active">Documentation Hub</a>
+                <a href="/docs/vlm-priors">VLM Priors &amp; 2D Homography</a>
+                <a href="/docs/output-schema">JSON Schema &amp; Headers</a>
+                <a href="/docs" target="_blank" rel="noopener">OpenAPI (Swagger UI) ↗</a>
+                <a href="/redoc" target="_blank" rel="noopener">ReDoc ↗</a>
+            </div>
+        </nav>
+
+        <div class="header">
+            <h1>T3D Multi-Sport AI Analyzer — Documentation</h1>
+            <p>Product architecture, JSON output schema, telemetry HTTP headers, and interactive OpenAPI specifications.</p>
+        </div>
+
+        <div class="content">
+            <div class="doc-grid">
+                <a href="/docs/vlm-priors" class="doc-card">
+                    <span class="doc-card-badge">Architecture &amp; Computer Vision</span>
+                    <h2>VLM Probabilistic Priors &amp; RANSAC 2D Homography →</h2>
+                    <p>How semantic VLM priors (team kits, active vs. bench filtering, posture-compensated ground projection) combine with ONNX keypoints and RANSAC 2D court homography.</p>
+                </a>
+
+                <a href="/docs/output-schema" class="doc-card">
+                    <span class="doc-card-badge">API Data Contract</span>
+                    <h2>JSON Output Schema &amp; HTTP Telemetry Headers →</h2>
+                    <p>Complete reference for the JSON output structure (<code>performance</code>, <code>token_usage</code>, <code>homography</code>, <code>detections</code>) and the <code>X-*</code> HTTP headers returned in direct image mode.</p>
+                </a>
+
+                <a href="/docs" target="_blank" rel="noopener" class="doc-card">
+                    <span class="doc-card-badge">OpenAPI 3.1 • Interactive</span>
+                    <h2>Swagger UI (<code>/docs</code>) ↗</h2>
+                    <p>Interactive OpenAPI documentation to inspect and test <code>POST /api/analyze</code>, <code>POST /api/visualize</code>, <code>GET /healthz</code>, and <code>GET /readyz</code> directly from your browser.</p>
+                </a>
+
+                <a href="/redoc" target="_blank" rel="noopener" class="doc-card">
+                    <span class="doc-card-badge">OpenAPI 3.1 • Reference</span>
+                    <h2>ReDoc Reference (<code>/redoc</code>) ↗</h2>
+                    <p>Clean, printable OpenAPI specification reference for all endpoints, multipart form parameters, and response schemas.</p>
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

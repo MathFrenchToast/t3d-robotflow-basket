@@ -296,6 +296,12 @@ async def visualize(
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
+@app.get("/documentation")
+async def documentation_hub():
+    """Serve unified product & API documentation hub page."""
+    return FileResponse(str(STATIC_DIR / "documentation.html"), media_type="text/html")
+
+
 @app.get("/docs/vlm-priors")
 async def vlm_priors_doc():
     """Serve technical documentation page for VLM Probabilistic Priors & RANSAC 2D Homography."""
