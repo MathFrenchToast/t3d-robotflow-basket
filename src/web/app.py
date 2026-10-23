@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -109,7 +110,6 @@ async def readyz():
         "status": "ready" if adapter is not None else "initializing",
         "supported_sports": list(SPORTS_CONFIGS.keys()),
         "openrouter_configured": bool(adapter and getattr(adapter, "openrouter_api_key", None)),
-        "gemini_configured": bool(adapter and getattr(adapter, "google_api_key", None)),
         "roboflow_configured": bool(adapter and getattr(adapter, "api_key", None)),
     }
 
@@ -121,7 +121,7 @@ async def analyze(
     output_format: str = Form("json"),
     return_image: bool = Form(False),
     backend: str = Form("openrouter"),
-    model: str = Form("openai/gpt-6-sol"),
+    model: str = Form("google/gemini-3.8-flash"),
     mode: str = Form("high"),
     vlm_priors: bool = Form(True),
     detect_landmarks: bool = Form(True),
@@ -133,6 +133,12 @@ async def analyze(
     """
     tmp_path: Optional[str] = None
     try:
+        if backend.strip().lower() == "gemini-direct":
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Direct Gemini backend is disabled on this endpoint; please use backend='openrouter'."},
+            )
+
         content = await image.read()
         if not content:
             return JSONResponse(status_code=400, content={"error": "Uploaded image is empty"})
@@ -152,11 +158,12 @@ async def analyze(
         court_model = runtime_cache.get_court_model(resolved_sport)
         effective_priors = bool(vlm_priors or detect_landmarks)
 
-        output, _ = analyze_image_workflow(
+        output, _ = await run_in_threadpool(
+            analyze_image_workflow,
             image_path=tmp_path,
             output_path=None,
             debug_dir=None,
-            backend=backend,
+            backend="openrouter",
             sport=resolved_sport,
             mode=mode,
             model_name=model,
@@ -177,17 +184,18 @@ async def analyze(
         wants_image = return_image or fmt in ("image", "side_by_side", "sbs", "annotated", "overlay")
 
         if wants_image:
-            frame = cv2.imread(tmp_path)
+            frame = await run_in_threadpool(cv2.imread, tmp_path)
             if frame is None:
                 return JSONResponse(status_code=400, content={"error": "Failed to decode uploaded image"})
 
-            annotated_frame, side_by_side = render_workflow_visualizations(
+            annotated_frame, side_by_side = await run_in_threadpool(
+                render_workflow_visualizations,
                 frame=frame,
                 output=output,
                 annotator=annotator,
             )
             target_img = annotated_frame if fmt in ("annotated", "overlay") else side_by_side
-            jpeg_bytes = _encode_jpeg(target_img)
+            jpeg_bytes = await run_in_threadpool(_encode_jpeg, target_img)
 
             perf = output.get("performance", {})
             usage = output.get("token_usage", {})
@@ -269,14 +277,15 @@ async def visualize(
             output_payload["sport"] = resolve_sport(sport).name
 
         annotator = runtime_cache.get_annotator(output_payload["sport"])
-        annotated_frame, side_by_side = render_workflow_visualizations(
+        annotated_frame, side_by_side = await run_in_threadpool(
+            render_workflow_visualizations,
             frame=frame,
             output=output_payload,
             annotator=annotator,
         )
 
         target_img = annotated_frame if view_mode.strip().lower() in ("annotated", "overlay") else side_by_side
-        jpeg_bytes = _encode_jpeg(target_img)
+        jpeg_bytes = await run_in_threadpool(_encode_jpeg, target_img)
         return Response(content=jpeg_bytes, media_type="image/jpeg")
 
     except json.JSONDecodeError:
